@@ -540,3 +540,7 @@ FastAPI 的依赖调用。进入 `run_agent` 前，FastAPI 先执行 `get_user_i
 
 先弄清数据“去了哪里”，再研究每个类内部“如何实现”，会比从 import 和构造函数逐行往下
 读容易很多。
+
+读完整条公共调用链后，可以继续阅读
+[`SMART_ROUTING_CODE_WALKTHROUGH.md`](SMART_ROUTING_CODE_WALKTHROUGH.md)，按当前真实源码逐行
+走查智能分流的字段追问、IOI、栏目、商品推荐、自采、自定义采购、排队和暂停恢复分支。

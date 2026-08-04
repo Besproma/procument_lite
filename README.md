@@ -30,6 +30,8 @@
 面向 Python/FastAPI/LangGraph 初学者的调用链阅读指南：
 
 - [docs/API_REQUEST_WALKTHROUGH.md](docs/API_REQUEST_WALKTHROUGH.md)
+- [docs/SMART_ROUTING_CODE_WALKTHROUGH.md](docs/SMART_ROUTING_CODE_WALKTHROUGH.md)：智能分流从
+  API 输入、全部 Graph 分支、暂停恢复到前端展示的逐行代码走查。
 
 文档覆盖：LangGraph/LangChain 编排、ReAct 场景路由、Scenario Tool/Atomic Tool、智能分流与知识推荐业务规则、商品推荐 Subgraph、Delegate 适配层、AG-UI + SSE、OpenGauss Checkpoint、长期记忆、全链路 Trace、React 前端、部署、测试和严格验收标准。
 
