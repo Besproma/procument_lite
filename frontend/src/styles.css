@@ -1,0 +1,114 @@
+:root {
+  color: #1f2a44;
+  background: #f4f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1100px;
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-header {
+  height: auto;
+  padding: 18px 32px;
+  line-height: normal;
+  background: linear-gradient(110deg, #edf4ff, #f7f2ff);
+  border-bottom: 1px solid #dce5f2;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.app-title.ant-typography {
+  margin: 0;
+  color: #27395e;
+}
+
+.app-subtitle {
+  color: #60708f;
+}
+
+.assistant-content {
+  max-width: 1120px;
+  padding: 28px 32px 56px;
+  margin: 0 auto;
+}
+
+.purchase-sider {
+  padding: 28px 20px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.assistant-block,
+.scene-entrances {
+  margin-bottom: 18px;
+}
+
+.conversation-card .ant-card-body {
+  padding-bottom: 20px;
+}
+
+.message-list {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.message-row.ant-list-item {
+  border: 0;
+}
+
+.message-user {
+  justify-content: flex-end;
+}
+
+.message-bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+  background: #f1f4f8;
+  border-radius: 12px;
+}
+
+.message-user .message-bubble {
+  background: #e6efff;
+}
+
+.block-actions {
+  margin-top: 20px;
+}
+
+.product-card {
+  height: 100%;
+  overflow: hidden;
+}
+
+.product-placeholder {
+  display: grid;
+  height: 160px;
+  color: #7c8aa5;
+  background: #eef3fa;
+  place-items: center;
+}
+
+.full-width-input {
+  width: 100%;
+}
+
+.trace-id {
+  margin-top: 24px;
+  overflow-wrap: anywhere;
+}

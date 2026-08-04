@@ -1,0 +1,17 @@
+# 生产镜像只需要对应工程的源码和依赖描述。
+# 测试 Fake、测试数据和文档不能进入生产构建上下文，避免误装配或泄露内部样例。
+.git
+.gitignore
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/*.pyc
+tests
+test_support
+docs
+frontend/node_modules
+frontend/dist
+*.log
+.env
+.env.*
+!.env.example

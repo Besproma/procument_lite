@@ -1,0 +1,29 @@
+# 生产 Compose 只装配应用，不在本文件里伪造 OpenGauss 或外围 Agent。
+# OpenGauss、模型和业务接口通过内网地址/环境文件注入。
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      args:
+        REQUIRE_LOCK: "1"
+    env_file:
+      - ${BACKEND_ENV_FILE:-../../deploy/docker/backend.env}
+    expose:
+      - "8000"
+    restart: unless-stopped
+    stop_grace_period: 60s
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: frontend/Dockerfile
+      args:
+        REQUIRE_LOCK: "1"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    stop_grace_period: 30s

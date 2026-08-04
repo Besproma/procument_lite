@@ -1,0 +1,26 @@
+[Unit]
+Description=Procurement Assistant FastAPI service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=procurement-assistant
+Group=procurement-assistant
+WorkingDirectory=/opt/procurement-assistant/current/backend
+EnvironmentFile=/etc/procurement-assistant/backend.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/procurement-assistant/current/backend/.venv/bin/uvicorn procurement_assistant.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=45
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target
