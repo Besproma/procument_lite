@@ -1,4 +1,12 @@
-"""请求局部 Trace 收集器和 span 计时器。"""
+"""记录一次请求中每个步骤做了什么、用了多久。
+
+阅读本文件前只需要先理解两个词：
+
+- Trace：一次用户请求的完整调用链，像一张总账；
+- Span：调用链中的一个具体步骤，像总账里一条带起止时间的明细。
+
+例如一次 Trace 可以包含 HTTP 根 Span、数据库 Span、Graph Span和模型 Span。
+"""
 
 import asyncio
 import copy
@@ -53,10 +61,11 @@ def safe_json(value: Any) -> Any:
 
 
 class TraceCollector:
-    """一个 Run 独享的 Trace 收集器。
+    """一个 Run 独享的“耗时记录本”。
 
-    不使用跨请求的全局列表；每个请求创建自己的对象，避免并发用户的 span 串线。子 span
-    通过 ContextVar 保存父 ID，但只在当前异步任务内生效。
+    每个重要步骤创建一条 Span 并追加到 ``spans`` 列表。不同请求各有一个 Collector，
+    避免并发用户的记录混在一起。子 Span 通过父 ID 组成树形结构，例如“模型调用”属于
+    “某个 Graph 节点”，而该节点又属于“本次 HTTP 请求”。
     """
 
     def __init__(
@@ -88,11 +97,11 @@ class TraceCollector:
         parent_span_id: str | None = None,
         bind_as_parent: bool = True,
     ) -> "SpanTimer":
-        """创建一个尚未开始的异步 span 上下文。
+        """创建一个尚未启动的单步骤计时器。
 
-        普通子调用保持 ``bind_as_parent=True``，让其内部 span 自动建立父子关系。HTTP
-        根 span 会跨越 StreamingResponse 生命周期，入口协程与流生成协程未必处于同一
-        Context，因此根 span 使用 ``False``，再由各执行任务显式 ``parent_scope``。
+        返回 ``SpanTimer`` 后，要进入 ``async with`` 或手工调用 ``__aenter__`` 才真正
+        记录开始时间。普通子调用保持 ``bind_as_parent=True``，让其内部 Span 自动挂到
+        当前步骤下面；HTTP 根 Span 跨越整个流式响应，因此由 agent.py 手工管理父子关系。
         """
 
         return SpanTimer(
@@ -130,7 +139,17 @@ def current_trace_collector() -> TraceCollector | None:
 
 
 class SpanTimer:
-    """异步上下文管理器，保证成功、异常和取消路径都结束 span。"""
+    """一个步骤的计时器，成功、异常和取消时都会记录结束状态。
+
+    常见用法是：
+
+    ``async with collector.start_span(...) as span:``
+    ``    result = await do_something()``
+    ``    span.set_output(result)``
+
+    进入代码块时调用 ``__aenter__`` 开始计时，离开时调用 ``__aexit__`` 停止计时；即使
+    do_something 报错，Python 也会调用 __aexit__，所以耗时记录不会永远停在 RUNNING。
+    """
 
     def __init__(
         self,
@@ -157,7 +176,7 @@ class SpanTimer:
         self._parent_token: Any = None
 
     async def __aenter__(self) -> Self:
-        """记录开始时间并建立当前异步任务的父 span。"""
+        """启动计时，创建真正的 TraceSpan 数据记录，并确定它的父步骤。"""
 
         started_at = self.collector._clock.now()
         span_id = self.collector._ids.new("span")
@@ -214,7 +233,7 @@ class SpanTimer:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        """结束 span，保留异常让上层决定业务分支。"""
+        """停止计时并记录成功、失败或取消；异常仍交给上层业务代码处理。"""
 
         del traceback
         assert self.span is not None

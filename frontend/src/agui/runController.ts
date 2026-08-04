@@ -38,8 +38,11 @@ export class AgentRunController {
     if (this.activeAbortController) {
       throw new Error("当前请求仍在执行，请等待完成");
     }
+    // threadId 在同一会话中保持不变；runId 标识这一次发送；messageId 标识这一条用户
+    // 消息。三个编号各管一层，后端和前端才能拒绝旧连接或重复请求中的事件。
     const runId = newId("run");
     const messageId = request.text ? newId("message") : null;
+    // 把页面上的自然语言、按钮或表单统一组装成后端 RunAgentInput 所需的 AG-UI JSON。
     const input: AgentRunInput = {
       threadId: request.threadId,
       runId,
@@ -56,6 +59,7 @@ export class AgentRunController {
     this.activeAbortController = new AbortController();
     onStart(runId, messageId);
     try {
+      // client.run 发出 HTTP 请求，并在每收到一条 SSE 事件时调用 onEvent。
       return await this.client.run(input, onEvent, this.activeAbortController.signal);
     } finally {
       this.activeAbortController = null;

@@ -1,4 +1,4 @@
-"""Scenario Graph 的启动、恢复、中断和 UI 事件协调。"""
+"""负责启动、暂停、恢复 LangGraph，并把暂停要求转换成前端表单或按钮。"""
 
 import asyncio
 import logging
@@ -56,7 +56,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class GraphExecutionResult(BaseModel):
-    """Graph Runner 返回给应用层的稳定结果。"""
+    """GraphRunner 交回应用层的结果摘要，而不是直接发送给前端的响应。"""
 
     scenario_instance_id: str
     scenario_id: str
@@ -66,7 +66,12 @@ class GraphExecutionResult(BaseModel):
 
 
 class GraphRunner:
-    """运行静态 Catalog 对应的已编译 LangGraph。"""
+    """Graph 的统一“驾驶员”。
+
+    Graph 文件只声明有哪些节点、按什么路线连接；本类负责一次场景如何开始、如何从
+    Checkpoint 恢复、如何等待用户输入以及完成后如何更新数据库。这样每个业务 Graph
+    不需要重复编写同一套生命周期代码。
+    """
 
     def __init__(
         self,
@@ -95,9 +100,16 @@ class GraphRunner:
         original_user_text: str | None,
         context: ExecutionContext,
     ) -> GraphExecutionResult:
-        """创建场景记录和初始 State，再执行到完成或首个 Interrupt。"""
+        """第一次进入某个场景：创建场景记录和初始状态，然后开始跑 Graph。
 
+        Graph 会一直运行，直到走到 END、发生错误，或者通过 interrupt 暂停等待用户。
+        """
+
+        # Catalog 是场景目录。它把 scenario_id 映射到对应 Scenario Tool，Tool 负责根据
+        # 用户原文和页面上下文创建该场景的第一份业务状态。
         item = self._catalog[scenario_id]
+        # scenario_instance_id 是“这一次场景实例”的编号。同一个 thread 可以先后运行
+        # 多次智能分流，每次都用不同编号隔离 Checkpoint。
         scenario_instance_id = self._ids.new("scenario")
         now = self._clock.now()
         record = ScenarioRecord(
@@ -112,6 +124,7 @@ class GraphRunner:
             expires_at=now + self._checkpoint_ttl,
         )
         try:
+            # 先保存场景记录，再把当前 Run 与它绑定；排障时就能从 run_id 找到场景。
             await context.call_database(
                 name="database.scenario.start",
                 operation=lambda: self._database.start_scenario(record),
@@ -138,6 +151,8 @@ class GraphRunner:
                     "page_context": context.page_context,
                 },
             ) as span:
+                # initial_state 是 Graph 的第一份“流程记事本”，例如原始用户文字、已收集
+                # 字段和当前状态。节点只返回要修改的字段，由 LangGraph 合并更新。
                 initial_state = item.tool.create_initial_state(
                     scenario_instance_id=scenario_instance_id,
                     input_source=input_source,
@@ -160,6 +175,7 @@ class GraphRunner:
             # 请求会永远看到一个没有可恢复 Checkpoint 的 running 场景。
             await self._abort_after_failure(record, error, context)
             raise
+        # 完成场景登记后，把初始状态交给统一执行方法。
         return await self._execute(
             scenario=record,
             graph_input=initial_state,
@@ -174,7 +190,10 @@ class GraphRunner:
         submitted_values: dict[str, Any],
         context: ExecutionContext,
     ) -> GraphExecutionResult:
-        """验证 Action 值并从最后成功 Checkpoint 恢复。"""
+        """用户提交按钮或表单后，从上次暂停位置继续 Graph。
+
+        LangGraph 已把暂停时的状态保存为 Checkpoint，所以这里不重新从第一个节点开始。
+        """
 
         validated_values = validate_action_values(
             action.input_schema_id,
@@ -211,14 +230,17 @@ class GraphRunner:
         graph_input: Any,
         context: ExecutionContext,
     ) -> GraphExecutionResult:
-        """执行 Graph，并保证所有异常路径都会结束或暂停场景。
+        """选择对应 Graph 并执行，同时统一处理错误和场景状态。
 
         Graph 成功返回不代表本次处理已经完成：后面还要校验 Interrupt、保存 Action、
         发布 UI 事件并更新场景状态。整个过程都放在同一异常边界内，避免客户端恰好在
         “Graph 已返回、等待点尚未保存”期间断线后留下永久 running 的场景。
         """
 
+        # _graphs 保存应用启动时已经 compile 的 LangGraph，不会在每次请求时重新构建。
         graph = self._graphs[scenario.scenario_id]
+        # thread_id 决定会话；checkpoint_ns 使用场景实例编号进一步隔离同一会话下的
+        # 多次场景。LangGraph Checkpointer 根据这两个值读写正确的流程状态。
         config = {
             "configurable": {
                 "thread_id": context.thread_id,
@@ -234,7 +256,10 @@ class GraphRunner:
                 context=context,
             )
         except (DelegateTimeoutError, DelegateUnavailableError) as error:
-            # 两次自动尝试都失败后不丢弃场景。LangGraph 已把失败节点之前的状态保存为
+            # 外围服务超时或暂时不可用时不丢弃场景。LangGraph 已把失败节点之前的状态
+            # 保存为 Checkpoint；这里向前端提供“重试”按钮，用户点击后从当前步骤继续。
+            #
+            # 技术细节：
             # Checkpoint；这里签发一个数据库一次性 Retry Action，用户点击后用 None
             # 重新调用同一个 Graph，从失败任务继续。协议/业务/配置错误不进入此分支。
             try:
@@ -275,13 +300,15 @@ class GraphRunner:
         graph_input: Any,
         context: ExecutionContext,
     ) -> GraphExecutionResult:
-        """运行一次 Graph，并把结果完整落成等待点或场景终态。
+        """真正调用 LangGraph，再把返回值处理成“等待用户”或“场景结束”。
 
         本方法不自行吞掉异常，统一交给 ``_execute`` 决定用户重试还是终止场景。这样
         Graph 异常、Checkpoint 解析异常、数据库异常和事件发送取消都遵循同一套收尾
         规则，不会因异常发生位置不同而留下不同的半成品。
         """
 
+        # Scenario Span 记录整个业务场景耗时，内部 Graph Span 专门记录 LangGraph 框架
+        # 执行耗时。更细的每个节点、模型和外围 Agent 还会继续创建各自的子 Span。
         async with context.trace.start_span(
             kind=SpanKind.SCENARIO,
             name=f"scenario.{scenario.scenario_id}",
@@ -294,6 +321,10 @@ class GraphRunner:
                 target=scenario.scenario_id,
                 input_json=graph_input,
             ) as graph_span:
+                # ainvoke 是 LangGraph 的异步执行入口：
+                # - 新场景传入 initial_state，从 START 开始；
+                # - 恢复场景传入 Command(resume=...)，从 interrupt 位置继续；
+                # - Checkpointer 会在节点之间保存可恢复状态。
                 raw_result = await graph.ainvoke(
                     graph_input,
                     config=config,
@@ -302,9 +333,12 @@ class GraphRunner:
                 graph_span.set_output(raw_result)
             scenario_span.set_output(raw_result)
 
+        # LangGraph 返回最终状态，并在 __interrupt__ 中附带“需要用户做什么”。
         result_mapping = self._as_mapping(raw_result)
         interrupt_values = result_mapping.pop("__interrupt__", ())
         if interrupt_values:
+            # 有 interrupt 表示流程这次没有结束，只是暂停，例如等待用户补充预算或选择
+            # 栏目。先把等待要求和一次性 Action 保存到数据库，再发布对应 UI 事件。
             first_interrupt = interrupt_values[0]
             raw_wait = getattr(first_interrupt, "value", first_interrupt)
             wait_request = _WAIT_REQUEST_ADAPTER.validate_python(raw_wait)
@@ -342,6 +376,7 @@ class GraphRunner:
                 state=result_mapping,
             )
 
+        # 没有 interrupt 表示 Graph 已走到 END。将场景更新为最终状态并通知前端。
         state_status = ScenarioStatus(result_mapping.get("status", ScenarioStatus.COMPLETED))
         final_status = state_status if state_status.is_terminal else ScenarioStatus.COMPLETED
         await context.call_database(
@@ -374,7 +409,7 @@ class GraphRunner:
         error: DelegateUnavailableError | DelegateTimeoutError,
         context: ExecutionContext,
     ) -> GraphExecutionResult:
-        """把可恢复外围失败转换成新的、可持久化用户重试等待点。"""
+        """外围服务暂时失败时，保存现场并向用户显示“重试”按钮。"""
 
         wait_request = self._waits.retry(capability="当前步骤")
         await context.call_database(

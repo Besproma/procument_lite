@@ -71,17 +71,27 @@ class RunAgentInput(ProtocolModel):
     由服务端决定。这里仍保留字段以兼容 Client，随后强制它们为空，防止客户端注入。
     """
 
+    # thread_id 表示“这段连续会话是谁”，同一个会话中的多轮请求保持不变。
     thread_id: ThreadId
+    # run_id 表示“当前这一次请求是谁”，每点击一次按钮或发送一次文字都要生成新的值。
     run_id: RunId
+    # 自然语言请求把本轮新用户消息放在这里；按钮或表单请求则必须保持空列表。
     messages: list[AGUIMessage] = Field(default_factory=list, max_length=200)
+    # AG-UI 标准允许客户端提交下面三个字段，但本系统不信任客户端提供业务状态和工具。
+    # 字段保留是为了兼容标准协议，校验器会要求它们为空。
     state: dict[str, Any] = Field(default_factory=dict)
     tools: list[dict[str, Any]] = Field(default_factory=list)
     context: list[dict[str, Any]] = Field(default_factory=list)
+    # forwarded_props 存放采购助手自己扩展的页面上下文、按钮和表单数据。
     forwarded_props: ForwardedProps = Field(default_factory=ForwardedProps)
 
     @model_validator(mode="after")
     def enforce_procurement_input_rules(self) -> "RunAgentInput":
-        """阻止自然语言和结构化操作互相混用。"""
+        """完成字段级校验后，再检查多个字段组合在一起是否合法。
+
+        ``@model_validator(mode="after")`` 是 Pydantic 的模型校验钩子。FastAPI 创建完
+        RunAgentInput 后会自动调用它，调用者不需要手工执行本方法。
+        """
 
         if self.state or self.tools or self.context:
             raise ValueError("当前版本不接受客户端 state、tools 或 context")

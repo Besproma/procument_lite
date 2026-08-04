@@ -32,7 +32,10 @@ class SpanStatus(StrEnum):
 
 
 class TraceSpan(BaseModel):
-    """一条完整的父子调用 span。
+    """一个步骤最终要写入数据库的耗时记录。
+
+    ``span_id`` 是当前步骤编号，``parent_span_id`` 指向上一级步骤。根 Span 的
+    parent_span_id 为空；把所有记录按这两个字段连接起来，就能看到完整调用树。
 
     输入输出按当前确认的“不脱敏业务数据”规则保存，但 ``safe_json`` 会在边界排除
     Authorization、Cookie、API Key 和数据库口令，避免把凭据写入 Trace。

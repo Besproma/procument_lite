@@ -27,6 +27,10 @@
 
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
+面向 Python/FastAPI/LangGraph 初学者的调用链阅读指南：
+
+- [docs/API_REQUEST_WALKTHROUGH.md](docs/API_REQUEST_WALKTHROUGH.md)
+
 文档覆盖：LangGraph/LangChain 编排、ReAct 场景路由、Scenario Tool/Atomic Tool、智能分流与知识推荐业务规则、商品推荐 Subgraph、Delegate 适配层、AG-UI + SSE、OpenGauss Checkpoint、长期记忆、全链路 Trace、React 前端、部署、测试和严格验收标准。
 
 代码开发和验收均以该文档为唯一依据。

@@ -123,6 +123,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const execute = useCallback(
     async (text: string | undefined, procurementInput: ProcurementInput | undefined) => {
       try {
+        // controller 负责发送一次 Run。第二个回调在请求开始时更新“处理中”状态；第三个
+        // 回调会被每一条 SSE 事件调用，并通过 reducer 把事件合并到当前页面状态。
         const traceId = await controllerRef.current.run(
           {
             threadId: state.threadId,
@@ -146,6 +148,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
                 : undefined;
             setState((previous) => beginRunState(previous, runId, userMessage));
           },
+          // 使用 previous 而不是直接读取外层 state，是因为 SSE 事件可能连续到达；React
+          // 会保证每一条事件都基于上一条已经合并后的最新状态继续更新。
           (event) => setState((previous) => reduceAGUIEvent(previous, event)),
         );
         setState((previous) => ({ ...previous, traceId, running: false }));

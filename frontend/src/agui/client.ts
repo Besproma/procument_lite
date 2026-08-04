@@ -68,6 +68,7 @@ export class ProcurementAgentClient {
     onEvent: (event: AGUIEvent) => void,
     signal: AbortSignal,
   ): Promise<string | null> {
+    // 这是浏览器真正进入后端的地方，对应 Python agent.py 中的 run_agent()。
     const response = await fetch(`${this.options.apiBaseUrl}/api/v1/agent`, {
       method: "POST",
       headers: {
@@ -94,11 +95,15 @@ export class ProcurementAgentClient {
       throw new Error("浏览器没有收到 SSE 响应流");
     }
 
+    // response.body 不是一次性 JSON，而是一条会持续到本轮完成的 SSE 字节流。
+    // reader 每次读取当前已经到达浏览器的部分，因此页面可以边处理、边显示。
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
     while (true) {
       const { value, done } = await reader.read();
+      // 一次 read 不一定正好对应一帧：可能只有半帧，也可能同时包含多帧。因此先追加到
+      // buffer，再按照 SSE 的空行分隔符逐帧切开，剩余半帧留到下一次 read。
       buffer += decoder.decode(value, { stream: !done }).replaceAll("\r\n", "\n");
       let boundary = buffer.indexOf("\n\n");
       while (boundary >= 0) {
@@ -154,6 +159,8 @@ export class ProcurementAgentClient {
   }
 
   private parseFrame(frame: string, onEvent: (event: AGUIEvent) => void): void {
+    // 每一帧形如 ``data: {...}``。取出 data 后先 JSON.parse，再用 Zod 校验字段结构；
+    // 校验通过才交给页面 reducer，避免错误或不兼容事件直接破坏界面状态。
     const data = frame
       .split("\n")
       .filter((line) => line.startsWith("data:"))

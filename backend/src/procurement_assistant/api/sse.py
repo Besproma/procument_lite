@@ -4,7 +4,14 @@ from pydantic import BaseModel
 
 
 def encode_sse_event(event: BaseModel) -> bytes:
-    """把一条已校验事件编码成一个 SSE data frame。
+    """把一个 Python 事件对象转换成浏览器能接收的一帧 SSE 字节。
+
+    例如 Python 事件最终会变成：
+
+    ``data: {"type":"RUN_FINISHED",...}\n\n``
+
+    SSE 使用两个换行表示“一帧结束”。agent.py 每 yield 一帧，前端就可以立即解析，
+    不必等待整个 Graph 全部处理完成。
 
     JSON 由 Pydantic 统一生成，字符串中的换行会被正确转义，不会突破 SSE frame 边界。
     不设置动态 ``event:`` 名称，客户端直接依据 AG-UI JSON 的 ``type`` 分发。

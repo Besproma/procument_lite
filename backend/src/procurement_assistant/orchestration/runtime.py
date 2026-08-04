@@ -31,10 +31,11 @@ DatabaseOperation = Callable[[], Awaitable[ResultT]]
 
 @dataclass(frozen=True, slots=True)
 class ExecutionContext:
-    """一次 Run 的临时上下文。
+    """一次 Run 共用的“运行工具包”。
 
-    该对象通过 LangGraph 的 runtime context 传递，永远不写进 Checkpoint。它包含事件发送
-    器、Trace 和 Delegate 期限，但不包含业务 State 或数据库连接。
+    Graph 节点需要知道当前用户、页面区域、如何发送事件以及如何记录耗时，但这些内容
+    不属于“商品名、栏目、预算”等业务状态。把它们集中在本对象中，通过 LangGraph 的
+    runtime context 传递，并且永远不写进 Checkpoint。
     """
 
     user_id: str
@@ -55,7 +56,7 @@ class ExecutionContext:
         operation: DatabaseOperation[ResultT],
         input_data: Any = None,
     ) -> ResultT:
-        """执行一个有业务含义的数据库 Delegate 方法并记录独立 span。
+        """调用一次数据库方法，并自动记录这一步的输入、输出和耗时。
 
         数据库调用不套用外围 Agent 的 15 秒重试策略：入口幂等、Action 消费和状态更新
         可能包含写操作，不能在不知道事务结果的情况下由通用层盲目重放。数据库连接和
@@ -82,7 +83,10 @@ class ExecutionContext:
         expose_stream_to_ui: bool = False,
         input_data: Any = None,
     ) -> ResultT:
-        """统一执行一次外围调用、超时、重试、Trace 和可选流转发。
+        """通过统一入口调用模型、外围 Agent 或服务。
+
+        节点只提供真正要执行的 ``operation``；这里统一补上超时、有限重试、耗时记录和
+        可选流式转发，避免每个业务节点都重复实现这些容易出错的通用代码。
 
         总 Run 截止时间由 ``self.deadline`` 控制；每次尝试最多使用配置的 15 秒或剩余时间
         中较小者。只有明确的临时错误和超时会重试一次，业务错误与结构化协议错误直接

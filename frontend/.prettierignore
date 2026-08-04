@@ -1,0 +1,9 @@
+# Vite 生成的压缩文件不是人工维护的源码，不能再次用 Prettier 改写。
+dist/
+
+# 本地安装依赖和测试/覆盖率产物同样不参与源码格式检查。
+node_modules/
+playwright-report/
+test-results/
+coverage/
+*.tsbuildinfo

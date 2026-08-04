@@ -23,11 +23,19 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def create_app(runtime: APIRuntime) -> FastAPI:
-    """使用 Composition Root 已创建的对象构造一个无隐藏依赖的应用。"""
+    """使用已经装配好的运行时对象创建 FastAPI 应用。
+
+    本函数主要负责 HTTP 世界的公共规则：启动/关闭资源、中间件、异常转换、跨域和
+    Router 注册。采购流程如何判断不放在这里。
+    """
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        """只管理显式资源关闭，不在 import 阶段打开连接。"""
+        """管理整个服务从启动到关闭的资源生命周期。
+
+        ``yield`` 之前只执行一次启动操作；服务运行期间停在 yield；进程准备关闭时再
+        执行 yield 后面的 finally，关闭数据库连接池、HTTP 客户端和后台任务。
+        """
 
         del app
         await runtime.start_resources()
@@ -39,6 +47,8 @@ def create_app(runtime: APIRuntime) -> FastAPI:
             )
             await runtime.close_resources()
 
+    # 这里才真正创建 FastAPI 应用。runtime 放进 app.state 后，中间件等公共组件也能
+    # 取得同一套运行时对象；业务 Router 仍通过函数参数显式接收 runtime。
     app = FastAPI(title=runtime.settings.app_name, lifespan=lifespan)
     app.state.runtime = runtime
 
@@ -47,10 +57,15 @@ def create_app(runtime: APIRuntime) -> FastAPI:
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-        """给验证失败等尚未进入业务路由的请求也分配安全 trace_id。"""
+        """给每个 HTTP 请求先分配一个调用链编号，再交给具体接口。
+
+        中间件像进入办公楼前的门卫：所有请求都会先经过这里。``call_next`` 才表示继续
+        交给后面的请求校验和 Router，因此即使 JSON 校验失败也已经有 trace_id 可查询。
+        """
 
         request.state.trace_id = runtime.ids.new("trace")
         response = await call_next(request)
+        # 同一个编号也放在响应头里，前端报错时可以把它提供给排障人员。
         response.headers.setdefault("X-Trace-ID", request.state.trace_id)
         return response
 
@@ -110,7 +125,10 @@ def create_app(runtime: APIRuntime) -> FastAPI:
             expose_headers=["X-Trace-ID"],
         )
 
+    # include_router 相当于把不同功能的“接口清单”安装到 FastAPI 应用。
+    # 主处理接口 POST /api/v1/agent 就在 build_agent_router 中注册。
     app.include_router(build_agent_router(runtime))
+    # 会话快照和健康检查使用独立 Router，避免主入口文件越来越大。
     app.include_router(build_sessions_router(runtime))
     app.include_router(build_health_router(runtime))
     return app

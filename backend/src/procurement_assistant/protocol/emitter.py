@@ -26,10 +26,11 @@ PayloadT = TypeVar("PayloadT", bound=ProtocolModel)
 
 
 class AGUIEventEmitter:
-    """一个 Run 独享的 AG-UI 事件发射器。
+    """一个 Run 独享的“前端消息打包器”。
 
-    事件序号只在当前 Run 内递增；发射器同时保留已发事件，方便本地 E2E 和 Trace 适配器
-    检查顺序。生产 SSE Sink 可以边发边消费，不要求把整条长流先放进内存。
+    Graph 节点只需要表达“显示一段文字”或“显示一组选项”。本类把这些内容包装成统一
+    AG-UI 事件，补齐 threadId、runId 和顺序号，再交给 agent.py 提供的 sink 放入队列。
+    同时保留已发事件，供结果持久化和调用链统计使用。
     """
 
     def __init__(
@@ -46,7 +47,7 @@ class AGUIEventEmitter:
         self.events: list[Event] = []
 
     async def _publish(self, event: EventT) -> EventT:
-        """保存并发送一条已经校验的事件，同时保留其具体事件类型。"""
+        """保存事件，并通过 sink 把它送到 agent.py 的 SSE 队列。"""
 
         self.events.append(event)
         if self._sink is not None:
@@ -77,7 +78,11 @@ class AGUIEventEmitter:
     async def text_message(
         self, content: str
     ) -> tuple[TextMessageStartEvent, TextMessageContentEvent, TextMessageEndEvent]:
-        """把一段完整助手文字编码成标准三段文字事件。"""
+        """把一段助手文字拆成“开始、内容、结束”三个标准事件。
+
+        目前内容可能一次性给出，但保持三段协议后，未来模型逐段生成文字时前端仍可以
+        使用同一种事件处理方式。
+        """
 
         message_id = new_identifier("message")
         start = await self._publish(TextMessageStartEvent(message_id=message_id))

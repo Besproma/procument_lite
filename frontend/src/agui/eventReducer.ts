@@ -150,6 +150,8 @@ function applyProcurementEvent(
  * 乱序或跨 Run 事件则显示协议错误，避免旧连接覆盖新场景界面。
  */
 export function reduceAGUIEvent(state: AssistantViewState, event: AGUIEvent): AssistantViewState {
+  // reducer 可以理解成“事件翻译器”：后端只发送标准事件，它在这里决定页面状态如何
+  // 改变。React 组件读取新状态后自动重新渲染，最终让用户看到文字、表单、商品或按钮。
   switch (event.type) {
     case "RUN_STARTED":
       if (event.threadId !== state.threadId || event.runId !== state.currentRunId) {

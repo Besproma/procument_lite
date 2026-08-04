@@ -16,13 +16,14 @@ NodeMethod = Callable[[SmartRoutingState, ExecutionContext], Awaitable[dict[str,
 
 
 def _bind(method: NodeMethod) -> Callable[..., Awaitable[dict[str, Any]]]:
-    """把可直接集成测试的节点方法适配成 LangGraph Runtime 签名。"""
+    """给普通业务节点包一层 LangGraph 需要的函数签名和耗时记录。"""
 
     async def wrapped(
         state: SmartRoutingState,
         runtime: Runtime[ExecutionContext],
     ) -> dict[str, Any]:
-        # 每个节点单独计时，才能区分“Graph 总体慢”究竟是字段提取、某个外围调用，
+        # wrapped 是 LangGraph 实际调用的函数；method 才是 nodes.py 中容易阅读的业务
+        # 方法。每个节点单独计时，才能区分“Graph 总体慢”究竟是字段提取、某个外围调用，
         # 还是纯业务节点耗时。节点输出仍由 LangGraph 合并，Trace 只读取副本。
         async with runtime.context.trace.start_span(
             kind=SpanKind.NODE,
@@ -44,8 +45,12 @@ def build_smart_routing_graph(nodes: SmartRoutingNodes, *, checkpointer: Any) ->
     能沿下列确定性路径发生。
     """
 
+    # 可以把 StateGraph 想成一张“带共享记事本的流程图”：
+    # - SmartRoutingState 是流程记事本，保存商品名、用途、栏目等业务状态；
+    # - ExecutionContext 是运行工具包，提供事件、Trace 和调用外围服务的能力。
     graph = StateGraph(SmartRoutingState, context_schema=ExecutionContext)
 
+    # add_node 只是给每个处理步骤起名，并绑定 nodes.py 中对应的方法；这里还没有执行。
     graph.add_node("extract_purchase_fields", _bind(nodes.extract_purchase_fields))
     graph.add_node("prepare_missing_fields", _bind(nodes.prepare_missing_fields))
     graph.add_node("wait_for_missing_fields", _bind(nodes.wait_for_missing_fields))
@@ -77,6 +82,9 @@ def build_smart_routing_graph(nodes: SmartRoutingNodes, *, checkpointer: Any) ->
     graph.add_node("prepare_custom_purchase", _bind(nodes.prepare_custom_purchase))
     graph.add_node("wait_for_custom_purchase", _bind(nodes.wait_for_custom_purchase))
 
+    # add_edge 表示固定的下一步；add_conditional_edges 表示根据 routes.py 的返回值选择
+    # 分支。START 是流程入口，END 是本次场景结束。顺着这些边从上往下读，就能看到完整
+    # 智能分流顺序。
     graph.add_edge(START, "extract_purchase_fields")
     graph.add_edge("extract_purchase_fields", "prepare_missing_fields")
     graph.add_conditional_edges(
@@ -156,4 +164,6 @@ def build_smart_routing_graph(nodes: SmartRoutingNodes, *, checkpointer: Any) ->
     graph.add_edge("prepare_custom_purchase", "wait_for_custom_purchase")
     graph.add_edge("wait_for_custom_purchase", END)
 
+    # compile 把上面声明的节点和边检查并组装成可执行 Graph。checkpointer 让流程能在
+    # interrupt 时保存状态，并在用户下一次提交按钮或表单后继续。
     return graph.compile(checkpointer=checkpointer)
