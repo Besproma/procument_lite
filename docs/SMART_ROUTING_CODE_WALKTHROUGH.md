@@ -372,6 +372,14 @@ def missing_required_fields(self) -> tuple[str, ...]:
 
 文件：[`graph.py`](../backend/src/procurement_assistant/orchestration/scenarios/smart_routing/graph.py)
 
+开始前必须区分三种顺序：
+
+1. **源码排列顺序**：文件中先写 `_bind`，再写 `build_smart_routing_graph`；
+2. **讲解顺序**：先解释 `_bind`，看 `add_node` 时才知道它返回了什么；
+3. **实际执行顺序**：先创建 `StateGraph`，之后每次登记节点时才调用 `_bind`。
+
+因此，下面7.2在7.3前面只是为了方便阅读，不表示程序先执行 `_bind` 再创建 Graph。
+
 ### 7.1 NodeMethod 类型别名
 
 ```python
@@ -384,7 +392,7 @@ NodeMethod = Callable[
 它只是给复杂类型取名：业务节点接收 State 和 Context，异步返回一个“要更新哪些字段”的
 字典。类型别名不会执行任何业务。
 
-### 7.2 `_bind` 包装业务节点
+### 7.2 先认识 `_bind`（这里只是辅助函数定义）
 
 ```python
 def _bind(method: NodeMethod):
@@ -406,7 +414,11 @@ def _bind(method: NodeMethod):
 6. `return result` 把更新交给 LangGraph 合并进 State；
 7. 最后把包装后的函数返回给 Graph。
 
-### 7.3 创建 Graph
+当 Python 第一次导入 `graph.py` 时，执行 `def _bind(...):` 的作用只是创建一个名为 `_bind`
+的函数对象。缩进在函数里面的代码此时不会执行。只有其他代码写出 `_bind(...)` 时，函数体
+才真正运行。
+
+### 7.3 实际运行第一步：创建 Graph
 
 ```python
 graph = StateGraph(
@@ -419,7 +431,61 @@ graph = StateGraph(
 - `context_schema` 说明每个节点能拿到的运行工具包类型；
 - 这一行只是创建构建器，还没有执行节点。
 
-### 7.4 每一条 `add_node`
+这行代码何时执行，是由 `composition.py` 明确调用决定的：
+
+```python
+"smart_routing": build_smart_routing_graph(
+    smart_nodes,
+    checkpointer=traced_checkpointer,
+)
+```
+
+调用进入 `build_smart_routing_graph()` 后，首先走到 `graph = StateGraph(...)`，所以实际是
+先创建 Graph。
+
+### 7.4 实际运行第二步：在 `add_node` 参数中调用 `_bind`
+
+以第一条节点注册为例：
+
+```python
+graph.add_node(
+    "extract_purchase_fields",
+    _bind(nodes.extract_purchase_fields),
+)
+```
+
+Python 调用函数前会先计算所有参数，所以这一条语句内部的顺序是：
+
+1. 读取已经创建好的 `graph.add_node` 方法；
+2. 得到第一个参数字符串 `"extract_purchase_fields"`；
+3. 执行 `_bind(nodes.extract_purchase_fields)`；
+4. `_bind` 创建并返回 `wrapped` 函数；
+5. 执行 `graph.add_node("extract_purchase_fields", wrapped)`，登记节点；
+6. 此时只登记，不执行 `wrapped`，也不执行真正的字段提取；
+7. 以后用户请求执行到这个 Graph 节点时，LangGraph 才调用 `wrapped`；
+8. `wrapped` 开启节点计时器，再执行真正的 `nodes.extract_purchase_fields(...)`。
+
+因此，完整实际顺序是：
+
+```text
+服务启动
+  → composition.py 调用 build_smart_routing_graph
+  → 创建 StateGraph
+  → _bind 第一个业务方法，得到 wrapped
+  → add_node 登记第一个 wrapped
+  → _bind 第二个业务方法，得到 wrapped
+  → add_node 登记第二个 wrapped
+  → ...登记所有节点和边
+  → compile
+
+用户请求到来
+  → graph.ainvoke
+  → LangGraph 选择当前节点
+  → 调用该节点的 wrapped
+  → wrapped 调用真正业务方法
+```
+
+下面是每一条 `add_node` 的登记内容：
 
 | Graph 节点名 | 对应方法 | 用途 |
 | --- | --- | --- |

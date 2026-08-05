@@ -16,7 +16,11 @@ NodeMethod = Callable[[SmartRoutingState, ExecutionContext], Awaitable[dict[str,
 
 
 def _bind(method: NodeMethod) -> Callable[..., Awaitable[dict[str, Any]]]:
-    """给普通业务节点包一层 LangGraph 需要的函数签名和耗时记录。"""
+    """给普通业务节点包一层 LangGraph 需要的函数签名和耗时记录。
+
+    本函数写在 build_smart_routing_graph 前面只是为了先定义、后使用。导入模块时 Python
+    只创建函数对象，不执行本函数体；真正调用发生在下面每个 add_node 的参数中。
+    """
 
     async def wrapped(
         state: SmartRoutingState,
@@ -45,12 +49,15 @@ def build_smart_routing_graph(nodes: SmartRoutingNodes, *, checkpointer: Any) ->
     能沿下列确定性路径发生。
     """
 
+    # 这是构建函数运行后的第一个实际步骤：先创建 Graph，再在后面的 add_node 参数中
+    # 逐次调用 _bind。源码里 _bind 的定义位置更靠前，不表示它会先于本行执行。
     # 可以把 StateGraph 想成一张“带共享记事本的流程图”：
     # - SmartRoutingState 是流程记事本，保存商品名、用途、栏目等业务状态；
     # - ExecutionContext 是运行工具包，提供事件、Trace 和调用外围服务的能力。
     graph = StateGraph(SmartRoutingState, context_schema=ExecutionContext)
 
-    # add_node 只是给每个处理步骤起名，并绑定 nodes.py 中对应的方法；这里还没有执行。
+    # Python 会先计算函数参数，所以每一行的执行细分为：先调用 _bind 得到 wrapped，
+    # 再调用 graph.add_node 注册 wrapped。此时仍没有执行 wrapped 内的业务节点。
     graph.add_node("extract_purchase_fields", _bind(nodes.extract_purchase_fields))
     graph.add_node("prepare_missing_fields", _bind(nodes.prepare_missing_fields))
     graph.add_node("wait_for_missing_fields", _bind(nodes.wait_for_missing_fields))
