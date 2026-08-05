@@ -6,5 +6,5 @@ set -euo pipefail
 
 reason="${1:-deployment}"
 cd "$(dirname "$0")/../backend"
-exec uv run --no-dev python -m procurement_assistant.administration.expire_scenarios \
+exec uv run --no-dev python -m procurement_assistant.business.administration.expire_scenarios \
   --reason "$reason"

@@ -27,11 +27,10 @@
 
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
-面向 Python/FastAPI/LangGraph 初学者的调用链阅读指南：
+面向 Python/FastAPI/LangGraph 初学者的连续调用链阅读指南：
 
-- [docs/API_REQUEST_WALKTHROUGH.md](docs/API_REQUEST_WALKTHROUGH.md)
-- [docs/SMART_ROUTING_CODE_WALKTHROUGH.md](docs/SMART_ROUTING_CODE_WALKTHROUGH.md)：智能分流从
-  API 输入、全部 Graph 分支、暂停恢复到前端展示的逐行代码走查。
+- [docs/BEGINNER_CODE_WALKTHROUGH.md](docs/BEGINNER_CODE_WALKTHROUGH.md)：以智能分流为例，
+  从 API 请求、准入、ReAct、LangGraph、暂停恢复、商品推荐到完整结束逐步解释。
 
 文档覆盖：LangGraph/LangChain 编排、ReAct 场景路由、Scenario Tool/Atomic Tool、智能分流与知识推荐业务规则、商品推荐 Subgraph、Delegate 适配层、AG-UI + SSE、OpenGauss Checkpoint、长期记忆、全链路 Trace、React 前端、部署、测试和严格验收标准。
 
@@ -44,18 +43,16 @@
 1. **本地可运行完成**：使用测试专用 Fake Delegate 跑通真实 LangGraph 后端和 React 前端。
 2. **生产接入完成**：真实 OpenGauss、外围 Agent、搜索、知识、排队、页面跳转和申购单能力全部验证通过。
 
-当前在受限环境中已用 Python 3.12 缓存依赖验证后端集成测试；标准可重复安装仍等待
-联网生成锁文件。当前没有 OpenGauss 测试环境、外围接口正式协议和完整前端 npm 依赖，
-因此不得误报为“生产接入完成”或“前端构建已通过”。
+当前已在 Python 3.12 环境安装后端锁定依赖并验证集成测试；仍没有 OpenGauss 测试环境、
+外围接口正式协议和完整前端 npm 依赖，因此不得误报为“生产接入完成”或“前端构建已通过”。
 
 后端静态门禁（不依赖联网）已经通过：
 
 ```text
-ruff check backend/src test_support tests        -> passed
-ruff format --check backend/src test_support tests -> passed
-python -m compileall backend/src test_support tests -> passed
-cd backend && mypy                         -> passed（97 个生产源码文件）
-Python 3.12.13 + FastAPI 0.141.1 + LangGraph 1.2.10 测试 -> 28 passed
+cd backend && uv run ruff check src ../test_support ../tests -> passed
+cd backend && uv run mypy                              -> passed（120 个生产源码文件）
+cd backend && uv run pytest                             -> 28 passed
+python -m compileall backend/src test_support tests      -> passed
 ```
 
 在可联网环境中，推荐从项目根目录执行：

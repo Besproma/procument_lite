@@ -27,7 +27,10 @@ build-backend = "hatchling.build"
 packages = ["src/procurement_assistant"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/procurement_assistant/prompts" = "procurement_assistant/prompts"
+"src/procurement_assistant/business/prompts/memory_update.md" = "procurement_assistant/business/prompts/memory_update.md"
+"src/procurement_assistant/business/prompts/product_search_terms.md" = "procurement_assistant/business/prompts/product_search_terms.md"
+"src/procurement_assistant/business/prompts/purchase_field_extraction.md" = "procurement_assistant/business/prompts/purchase_field_extraction.md"
+"src/procurement_assistant/business/prompts/scenario_router.md" = "procurement_assistant/business/prompts/scenario_router.md"
 
 [dependency-groups]
 dev = [

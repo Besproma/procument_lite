@@ -2,4 +2,8 @@
 
 `001_assistant_core.sql` 创建采购助手自有业务表，回滚脚本只允许在无正式数据的新环境使用。
 
-LangGraph Checkpoint 表没有在当前未联网、未锁定 `langgraph-checkpoint-postgres` 精确版本的情况下手写。其表结构属于该依赖的持久化协议，必须在依赖版本锁定后，从同版本官方迁移生成并提交为下一份显式 SQL，再在目标 OpenGauss 验证。生产 `/health/ready` 在这些表和兼容性未验证前不得视为通过。
+`uv.lock` 已锁定 `langgraph-checkpoint-postgres`，但当前仍没有目标 OpenGauss 环境，因此
+尚未把官方 Checkpointer 表迁移误报为已兼容。接入生产前必须从锁定版本提取官方迁移，
+作为下一份显式、可审阅 SQL 提交，并在目标 OpenGauss 验证 `checkpoint`、`blob`、
+`pending writes`、暂停恢复和并发行为。应用启动时不得用 `setup()` 静默改表；上述迁移和
+兼容性验证完成前，生产 `/health/ready` 不得视为通过。

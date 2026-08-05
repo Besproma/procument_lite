@@ -1,12 +1,12 @@
 # 采购智能助手轻量版开发文档
 
-> 文档状态：已审核，开发中
+> 文档状态：Core / Business 物理分层已完成，本文与当前代码保持一致
 >
-> 代码状态：已开始开发
+> 代码状态：后端前三层（接入与应用、编排核心、资源访问）已完成物理分层，前端本轮不处理
 >
 > 本文是本项目唯一权威的开发依据。聊天记录、旧项目代码和其他目录文档均不得替代本文。
 
-## 1. 文档目的
+## 0. 文档目的
 
 本文必须达到以下目标：
 
@@ -17,6 +17,249 @@
 5. 明确区分本地 Mock 验收与真实生产接入验收。
 
 除非用户后续明确修改本文，开发 Agent 不得自行扩大或缩小范围。
+
+## 1. 当前物理分层重构基线（最高优先级）
+
+本节是本次重构的最高优先级约束。全文只能出现下面这一套有效生产目录；旧路径已经删除，
+文档中的代码引用也必须指向新路径。
+
+### 1.1 本次要解决的问题
+
+当前代码把通用运行引擎和采购业务放在同一个 Python 包层级中。例如，Core 的装配文件
+直接 import 智能分流、知识推荐和 IOI Delegate。这样新增一个业务场景时，开发者必须修改
+引擎代码，业务规则也容易逐渐进入引擎。
+
+本次重构必须达到以下结果：
+
+1. 后端生产代码物理分成 `core` 和 `business` 两个 Python 包。
+2. 依赖方向只有 `business → core`；Core 不得 import Business。
+3. 新增一个使用既有交互原语的业务场景，只修改 Business 目录。
+4. Core 仍可因真正的平台能力升级而演进，但普通业务变更不得修改 Core。
+5. 代码保持一个服务、一个仓库和一个进程，不拆微服务，不使用运行时扫描。
+6. 本轮只重构结构，不修改现有 API、SSE、数据库表和业务规则；前端本轮不移动、不改造。
+
+### 1.2 用一句话理解两层
+
+```text
+Core 负责“流程引擎怎样可靠运行”
+Business 负责“采购业务要做什么”
+```
+
+判断一段代码放哪一层时，不看旧目录名字，只看它是否理解采购业务含义：
+
+| 代码知道的内容 | 所属层 | 例子 |
+|---|---|---|
+| 超时、重试、Checkpoint、SSE、Trace、HTTP 连接池 | `core` | `GraphRunner`、`ExecutionContext` |
+| 商品、栏目、IOI、预算、合同、采购规则 | `business` | `SmartRoutingState`、IOI Delegate |
+| 通用表单、选项、按钮的生命周期 | `core` | `FormWaitRequest`、Action 消费 |
+| “栏目选择”字段必须是候选集合中的一个 | `business` | 栏目输入校验器 |
+| 结构化模型调用和备用模型切换 | `core` | Model Runtime |
+| “从用户话术提取商品名称” | `business` | 采购字段模型任务 |
+
+### 1.3 目标目录（后端）
+
+前端在本轮保持现状。后端目标目录如下；每个目录只承担表中写明的职责。
+
+```text
+backend/src/procurement_assistant/
+├── main.py                          # 稳定启动入口，只调用 Business 装配入口
+├── core/                             # 通用运行引擎；绝不 import business
+│   ├── api/                          # HTTP、SSE、身份、错误和会话快照接入
+│   ├── config/                       # CoreSettings 和模型连接配置对象
+│   ├── delegates/                    # 通用模型、HTTP、数据库和流式调用适配
+│   │   ├── common/                   # 调用上下文、HTTP 客户端和内部流事件
+│   │   ├── database/                 # Run、场景、Action、Checkpoint、记忆和 Trace 数据访问
+│   │   └── model/                    # OpenAI 兼容模型运行时和结构化输出接口
+│   ├── domain/                       # ID、生命周期和通用系统错误
+│   ├── memory/                       # 后台任务管理和长期记忆更新接口
+│   ├── observability/                # Span、Trace 收集、Checkpoint 计时和落库
+│   ├── orchestration/                # Run 应用服务、GraphRunner、运行上下文和通用路由
+│   │   └── router/                   # 顶层 ReAct 路由与场景切换协调
+│   ├── protocol/                     # AG-UI 信封、通用输入、交互和事件传输
+│   └── shared/                       # 可测试时钟和 ID 生成器
+│
+└── business/                         # 采购业务；可以 import core
+    ├── administration/               # 发布前结束旧场景的业务管理命令
+    ├── bootstrap.py                  # 唯一业务装配入口，创建所有具体实现
+    ├── config/                       # AppSettings 和 BusinessSettings
+    ├── delegates/                    # IOI、栏目、搜索、知识和排队的具体 Delegate
+    │   ├── agents/                   # 外围采购 Agent 适配
+    │   └── services/                 # 搜索、知识缓存和排队服务适配
+    ├── domain/                       # 商品、栏目、预算、记忆等采购领域模型
+    ├── interaction/                  # 业务表单字段、操作编号和等待点工厂
+    ├── memory/                       # 个人采购记忆的生成和合并实现
+    ├── prompts/                      # 一个模型任务一个 Prompt 文件
+    ├── protocol/                     # 商品、排队、采购跳转和快照策略等业务协议
+    ├── registry/                     # 场景、Atomic Tool、模型任务和交互的静态注册
+    ├── scenarios/                    # 按场景纵向聚合 State、Node、Route、Graph
+    │   ├── knowledge/                # 知识推荐场景及 definition.py
+    │   ├── smart_routing/            # 智能分流场景及 definition.py
+    │   └── subgraphs/                # 只能被业务 Graph 调用的内部子图
+    └── tools/                        # 一个 Scenario/Atomic Tool 一个文件和一个类
+```
+
+`main.py` 位于两层之外，是稳定的进程入口。它可以 import `business.bootstrap`；这不会
+违反 Core 边界，因为它不是 Core。Core 的任何文件都不能反向 import `business`。
+
+### 1.4 依赖和装配方向
+
+```text
+main.py
+  ↓
+business.bootstrap
+  ├─ 读取 CoreSettings + BusinessSettings
+  ├─ 创建 Core 基础设施
+  ├─ 创建 Business Delegate、Model Task 和交互 Registry
+  ├─ 创建每个场景的 ScenarioDefinition
+  └─ 把 Business Catalog 交给 core.build_runtime(...)
+        ↓
+      Core API / Application / GraphRunner / Protocol / Trace
+```
+
+允许：
+
+```text
+business → core
+main     → business
+test_support → business/core
+tests    → business/core
+```
+
+禁止：
+
+```text
+core → business
+生产代码 → tests
+生产代码 → test_support
+```
+
+本轮暂不增加自动 import 检查；依赖规则先写入本文和代码评审清单，后续再增加静态门禁。
+
+### 1.5 Core 的稳定通用能力
+
+Core 不能知道“IOI 是什么”，但要稳定提供以下机制：
+
+- 统一 API 接入、身份读取、请求校验和 SSE 返回；
+- Run 幂等、同一 `threadId` 租约、场景启动/恢复/结束；
+- LangGraph `ainvoke`、`interrupt`、Checkpoint 和 24 小时恢复；
+- 顶层 ReAct 场景路由。它只能看到 Business 注入的 Scenario Tool 描述；
+- 统一 Delegate 调用：单次超时、Run 总截止时间、有限重试、Trace 和流式接收；
+- 统一数据库生命周期、短事务、Action 消费和通用记忆存取；
+- 通用文字、表单、选项、按钮、重试和事件信封；
+- 配置校验、容量限制、错误边界和资源关闭。
+
+Core 的 Delegate 调用不是字符串路由器。Business 把一个已经绑定了具体 Delegate 的
+异步函数交给 `context.call_delegate(operation=...)`，Core 只在函数外层添加超时、重试、
+Trace 和流式保护。`name` 仅用于 Trace 标签，不能触发动态 import。
+
+### 1.6 Business 的可变内容
+
+Business 必须拥有以下内容：
+
+- 每个场景的 State、Node、Route、Graph 和 Scenario Tool；
+- 采购外围 Agent 的强类型接口、请求/响应模型和 HTTP 映射；
+- Atomic Tool 的实现和描述；
+- 业务模型任务、输入/输出模型和 Prompt；
+- 采购表单、栏目候选校验、采购 Action 和业务事件 payload；
+- 场景专属数据库 Repository 和迁移；
+- 业务缓存 Key、TTL、序列化模型和缓存未命中策略；
+- 个人记忆中采购字段的含义和记忆更新规则。
+
+### 1.7 场景注册协议
+
+Core 定义不含业务含义的注册协议，Business 创建已经装配好的对象：
+
+```python
+@dataclass(frozen=True, slots=True)
+class ScenarioDefinition:
+    """Core 只使用这些通用字段，不读取任何采购 State 字段。"""
+
+    scenario_id: str
+    display_name: str
+    description: str
+    tool: ScenarioTool
+    graph: CompiledGraph
+```
+
+Business 的 `registry/scenarios.py` 显式汇总所有 `definition.py` 生成的定义并触发 Core
+启动校验。Registry 保存对象和函数，不保存模块路径、类名字符串或数据库配置。
+
+新增场景的最短路径：
+
+1. 新增 `business/scenarios/<scene>/`，至少包含 `definition.py`、`state.py`、`nodes.py`、
+   `routes.py`、`graph.py`；每个 Scenario Tool 仍使用独立文件和独立类。
+2. 在 `business/registry/scenarios.py` 显式增加一个定义。
+3. 在 `business/bootstrap.py` 为该场景创建强类型依赖并编译 Graph。
+4. 如果使用新表单、模型任务、Atomic Tool 或业务事件，在对应 Registry 增加一项。
+5. 如果只使用已有通用交互原语，Core 和前端都不改。
+
+### 1.8 通用协议和业务协议
+
+Core 的 `ScenarioTriggerInput.scenario_id` 是受长度约束的普通字符串，不写死场景枚举。
+Business `ScenarioRegistry` 在启动时建立允许列表，应用层在启动/按钮请求时校验它；未注册编号不得
+启动 Graph。
+
+Core 负责 AG-UI 事件信封、事件编号、顺序、去重、SSE 和持久化。Business 负责商品列表、
+排队信息、采购跳转等业务 payload。现有对外 JSON 字段和值必须保持不变，因此前端本轮不改。
+
+Core 的表单和 Action 只保存通用结构。Business Registry 提供具体输入模型和校验器，例如
+“栏目 option_id 必须在上一次调用返回的候选集合中”。Core 负责 Action 所属用户、场景、
+过期和一次性消费，不能理解栏目规则。
+
+### 1.9 模型、Prompt、Delegate、缓存和配置归属
+
+| 能力 | Core | Business |
+|---|---|---|
+| 模型 | 结构化调用、超时、备用模型、异常治理 | 任务 ID、输入/输出模型、Prompt 和任务封装 |
+| Delegate | 通用调用上下文、HTTP 客户端、流式 sink | IOI/栏目/搜索/知识等具体接口和适配器 |
+| 数据库 | 连接池、事务边界、Checkpoint、Run、记忆和 Trace | 场景专属 Repository、表和迁移 |
+| 缓存 | 通用 Cache 接口、连接和故障处理 | Key、TTL、值模型和缓存语义 |
+| 配置 | `CoreSettings` 和基础设施校验 | `BusinessSettings` 和业务配置校验 |
+| 记忆 | 按 user_id 存取、异步调度和并发治理 | 采购记忆字段、提取 Prompt 和非关键使用方式 |
+
+### 1.10 迁移清单
+
+重构时按下表迁移，不能只新增空目录后继续使用旧路径：
+
+| 重构前路径 | 重构后归属 | 处理方式 |
+|---|---|---|
+| `api/` | `core/api/` | 保留通用 HTTP/SSE 行为，不 import 具体场景 |
+| `business/bootstrap.py` | `business/bootstrap.py` | 成为唯一知道所有采购实现的装配入口 |
+| `config.py` | `core/config/` + `business/config/` | 基础设施配置与采购配置分开 |
+| `delegates/common/` | `core/delegates/common/` | 超时上下文、HTTP 和通用流事件 |
+| `delegates/database/` | `core/delegates/database/` | 通用助手数据、Checkpoint 和 Trace |
+| `delegates/model/` | `core/delegates/model/` | 只保留与业务任务 ID 无关的模型运行时 |
+| `delegates/agents/`、`delegates/services/` | `business/delegates/` | IOI、栏目、搜索、知识和排队 |
+| `domain/errors.py`、`identifiers.py`、`lifecycle.py` | `core/domain/` | 通用错误、ID 和生命周期 |
+| `domain/procurement.py` | `business/domain/` | 商品、栏目、预算和采购结果模型 |
+| `memory/task_manager.py` | `core/memory/` | 通用后台任务生命周期 |
+| `memory/updater.py` | Core 接口 + `business/memory/` 实现 | Core 调度，Business 定义记忆补丁含义 |
+| `observability/` | `core/observability/` | 全链路 Trace 通用能力 |
+| `orchestration/application.py`、`graph_runner.py`、`runtime.py` | `core/orchestration/` | 通用 Run/Graph 生命周期 |
+| `orchestration/router/` | `core/orchestration/router/` | 只读取 Business 注入的场景目录 |
+| `orchestration/scenarios/`、`subgraphs/` | `business/scenarios/` | 场景纵向聚合 |
+| `orchestration/tools/`、`catalog/` | Core 合同 + Business 实现/Registry | 删除 Core 对具体 Tool 的 import |
+| `orchestration/action_inputs.py`、`wait_factory.py` | Core 原语 + Business 定义 | 通用生命周期与业务字段校验拆开 |
+| `prompts/` | `business/prompts/` | 一个业务模型任务一个 Prompt |
+| `core/protocol/` | `core/protocol/` + `business/protocol/` | 通用信封与业务 payload 拆开 |
+| `shared/` | `core/shared/` | 时钟和 ID；业务复用代码另放 Business Shared |
+| `administration/` | `business/administration/` | 依赖 Core 数据库，但读取 Business 生产配置 |
+
+### 1.11 重构验收和执行顺序
+
+本次执行顺序固定为：
+
+```text
+1. 先更新本文的目标目录、协议和验收规则
+2. 不等待额外审核，直接按本文移动和重构后端代码
+3. 保持现有接口、SSE、数据库和业务行为不变
+4. 运行编译、静态检查、契约测试和集成测试
+5. 生成连续的新手代码阅读指南
+6. 删除被新指南替代的旧走查文档并更新 README
+```
+
+重构期间不引入业务版本号，不为旧路径保留转发模块。按既有决策，部署新代码时结束
+无法由新 Graph 安全恢复的旧场景，不做旧/新 Graph 兼容恢复。
 
 ## 2. 术语说明
 
@@ -173,27 +416,29 @@
 
 ## 6. 技术版本基线
 
-当前执行环境无法访问 PyPI 和 npm，因此本阶段只锁定版本线。开始开发时必须联网解析最新稳定兼容版本并提交锁文件，禁止编造“最新版”小版本。
+后端已在 2026-08-05 通过 `uv` 完成兼容解析并提交 `uv.lock`；下表同时记录允许版本线和
+本次实际锁定版本。以后升级必须重新运行全部门禁，不能只修改版本号。前端本轮不处理，
+仍按其现有锁文件单独验收。
 
 ### 6.1 后端版本线
 
-| 技术 | 版本线 |
-|---|---|
-| Python | `>=3.12,<3.13`，使用 3.12 最新补丁版本 |
-| LangGraph | 1.x 最新稳定兼容版 |
-| LangChain | 1.x 最新稳定兼容版 |
-| langchain-core | 与 LangChain、LangGraph 同时解析的 1.x |
-| langchain-openai | 1.x 最新兼容版 |
-| LangGraph PostgreSQL Checkpointer | 与锁定的 LangGraph 1.x 兼容的最新稳定版；必须另验 OpenGauss |
-| FastAPI | 最新稳定版，保持 `<1.0` |
-| Uvicorn | 最新稳定版，保持 `<1.0` |
-| Pydantic | 2.x 最新稳定版 |
-| pydantic-settings | 2.x 最新稳定版 |
-| AG-UI Python SDK | 最新稳定版 |
-| HTTPX | 最新稳定兼容版 |
-| Psycopg | 3.x 最新稳定版，包含异步连接池 |
-| Tenacity | 9.x 或当时最新稳定兼容版 |
-| uv | 最新稳定版 |
+| 技术 | 允许版本线 | 当前锁定/执行版本 |
+|---|---|---|
+| Python | `>=3.12,<3.13` | `3.12.13` |
+| LangGraph | `>=1,<2` | `1.2.10` |
+| LangChain | `>=1,<2` | `1.3.14` |
+| langchain-core | `>=1,<2` | `1.5.3` |
+| langchain-openai | `>=1,<2` | `1.4.1` |
+| LangGraph PostgreSQL Checkpointer | `>=3,<4`；必须另验 OpenGauss | `3.1.1` |
+| FastAPI | `<1` | `0.141.1` |
+| Uvicorn | `<1` | `0.52.1` |
+| Pydantic | `>=2,<3` | `2.13.4` |
+| pydantic-settings | `>=2,<3` | `2.14.2` |
+| AG-UI Python SDK | 锁文件解析的兼容稳定版 | `0.1.19` |
+| HTTPX | `<1` | `0.28.1` |
+| Psycopg / psycopg-pool | `>=3,<4` | `3.3.4` / `3.3.1` |
+| Tenacity | `>=9,<10` | `9.1.4` |
+| uv | 当前开发工具稳定版 | `0.11.1` |
 
 ### 6.2 前端版本线
 
@@ -257,30 +502,39 @@ procumentagent_lite/                              # 项目根目录，只放跨�
 │   ├── migrations/                               # OpenGauss 显式 SQL 迁移与回滚脚本
 │   └── src/                                      # 后端生产源码根目录
 │       └── procurement_assistant/                # 后端唯一 Python 包
-│           ├── main.py                           # FastAPI 应用创建入口，不写业务逻辑
-│           ├── administration/                   # 只供发布脚本使用的数据库管理命令
-│           ├── config.py                         # Pydantic Settings 和环境变量定义
-│           ├── composition.py                    # 唯一 Composition Root，明确装配所有真实依赖
-│           ├── api/                              # HTTP、SSE、身份、请求校验和异常边界
-│           ├── protocol/                         # AG-UI 标准类型适配和采购 CUSTOM 事件模型
-│           ├── orchestration/                    # ReAct、LangGraph、Scenario Tool、Atomic Tool 和状态
-│           │   ├── router/                       # ReAct 场景路由与场景切换确认
-│           │   ├── catalog/                      # Scenario 与 Atomic Tool 的静态 Python 目录
-│           │   ├── scenarios/                    # 用户可进入的完整业务 Graph
-│           │   │   ├── smart_routing/            # 智能分流 Graph、状态、节点和边
-│           │   │   └── knowledge/                # 知识推荐 Graph、状态、节点和边
-│           │   ├── subgraphs/                    # 只能被其他 Graph 调用的内部子流程
-│           │   │   └── product_recommendation/   # 商品推荐语义拆解、搜索和分页子图
-│           │   └── tools/                        # 一个文件一个 Scenario Tool 或 Atomic Tool 实现
-│           ├── delegates/                        # 所有进出主服务边界的调用接口和生产实现
-│           │   ├── model/                        # OpenAI 兼容模型及可选备用模型 Delegate
-│           │   ├── agents/                       # IOI、栏目和重复自采等外围 Agent Delegate
-│           │   ├── services/                     # 商品搜索、知识、排队等普通外部服务 Delegate
-│           │   └── database/                     # Checkpoint、会话、记忆、锁和 Trace 的 OpenGauss Delegate
-│           ├── prompts/                          # 每个模型任务一个独立 Prompt 文件
-│           ├── observability/                    # trace 上下文、计时器和 LangChain 回调
-│           ├── domain/                           # 与框架无关的采购数据模型、枚举和业务错误
-│           └── shared/                           # 仅放真正跨模块使用的小型通用工具
+│           ├── main.py                           # 稳定启动入口，只调用 business.bootstrap
+│           ├── core/                             # 通用引擎，禁止反向 import business
+│           │   ├── api/                          # FastAPI、SSE、身份、错误和会话接口
+│           │   ├── config/                       # CoreSettings、模型端点等通用配置模型
+│           │   ├── delegates/                    # 通用数据库、模型、HTTP 和流调用边界
+│           │   │   ├── common/                   # 调用上下文、HTTP 客户端、流事件
+│           │   │   ├── database/                 # Run、Action、Checkpoint、记忆和 Trace 数据访问
+│           │   │   └── model/                    # 结构化模型和 ReAct 的通用实现
+│           │   ├── domain/                       # ID、生命周期和通用错误
+│           │   ├── memory/                       # 后台任务管理和 MemoryUpdater 接口
+│           │   ├── observability/                # Span 收集、Checkpoint 计时和批量落库
+│           │   ├── orchestration/                # Application、GraphRunner、运行上下文和等待原语
+│           │   │   └── router/                   # ReAct 场景路由和场景切换协调
+│           │   ├── protocol/                     # AG-UI 通用输入、事件信封和 SSE 适配
+│           │   └── shared/                       # 时钟和 ID 生成器
+│           └── business/                         # 采购业务，允许 import core
+│               ├── administration/               # 发布前结束旧场景的业务管理命令
+│               ├── bootstrap.py                  # 唯一业务装配入口
+│               ├── config/                        # AppSettings 和 BusinessSettings
+│               ├── delegates/                     # 采购外围 Agent 和服务适配器
+│               │   ├── agents/                    # IOI、栏目、重复自采
+│               │   └── services/                  # 搜索、知识缓存、排队
+│               ├── domain/                        # 商品、栏目、预算和记忆领域模型
+│               ├── interaction/                   # 业务操作、表单模型和等待点工厂
+│               ├── memory/                        # 个人采购记忆更新实现
+│               ├── prompts/                       # 每个业务模型任务一个 Prompt 文件
+│               ├── protocol/                      # 商品、排队、页面跳转和快照策略
+│               ├── registry/                      # 场景、模型任务、交互和 Atomic Tool 注册
+│               ├── scenarios/                     # 业务 State、Node、Route、Graph
+│               │   ├── knowledge/                 # 知识推荐及 definition.py
+│               │   ├── smart_routing/             # 智能分流及 definition.py
+│               │   └── subgraphs/                 # 商品推荐内部子图
+│               └── tools/                         # 每个 Scenario/Atomic Tool 一个文件
 ├── frontend/                                     # React 前端生产工程，禁止放后端和测试代码
 │   ├── package.json                              # 前端依赖与脚本
 │   ├── package-lock.json                         # 前端精确依赖锁
@@ -332,25 +586,27 @@ procumentagent_lite/                              # 项目根目录，只放跨�
 允许的依赖方向：
 
 ```text
-api / protocol
+core/api / core/protocol
       ↓
-orchestration
+core/orchestration
       ↓
-domain + Delegate 接口
       ↑
-Delegate 生产实现
+core 和 Business 的具体 Delegate
 
-composition.py 在最外层创建并连接所有对象
+business/bootstrap.py 在最外层创建并连接所有对象
 ```
 
 具体要求：
 
-1. `composition.py` 是唯一知道全部具体实现的位置。
+1. `business/bootstrap.py` 是唯一知道全部具体实现的位置。
 2. Graph、Node 和 Tool 的构造函数只接收所需 Delegate，不读取全局容器。
 3. 禁止 Service Locator、可变全局 Registry 和运行时依赖查找。
-4. Delegate 接口靠近使用方定义，具体实现放在 `delegates`。
+4. Core 的通用接口放在 Core，采购外围 Delegate 接口和实现放在 `business/delegates/`。
 5. FastAPI `Depends` 只用于 HTTP 级身份和请求上下文，不作为全局业务依赖容器。
-6. 测试通过构造函数注入 Fake，不允许 monkey patch 生产模块的全局对象。
+6. 场景依赖通过 `definition.py` 中的强类型依赖对象注入；不使用 Service Locator。
+7. 测试通过构造函数注入 Fake，不允许 monkey patch 生产模块的全局对象。
+8. Core 的场景、Action 输入和记忆更新均依赖 Protocol/Registry；Core 代码中不得出现
+   `procurement_assistant.business` 字符串或导入。
 
 ## 9. 标识、身份与页面上下文
 
@@ -642,6 +898,10 @@ composition.py 在最外层创建并连接所有对象
 块表用于审计并不会随 Action 失效而删除，因此快照投影必须依据当前是否存在活动场景
 过滤交互块，不能把“曾展示过”误当作“现在仍可点击”。
 
+快照投影算法属于 Core，但可恢复事件名称由 Business 的
+`business/protocol/snapshot.py` 注入 `SnapshotBlockPolicy`。因此新增业务事件时，只需在
+Business 策略中决定它是否可恢复，不需要修改 Core 的会话接口。
+
 ### 10.10 断线行为
 
 - 浏览器断开 POST SSE 后，不保证当前正在运行的外围调用继续执行。
@@ -823,14 +1083,14 @@ Atomic Tool 只在以下任一条件成立时创建：
 
 一个节点只调用一次的 Delegate 不再套一层 Atomic Tool。Atomic Tool 本身可以按需要调用外围 Agent、模型、长期记忆或普通外部服务，但仍须通过对应 Delegate，禁止在 Tool 中直接写 HTTP、SQL 或读取凭据。
 
-当前两个已确认场景暂时没有满足上述条件的 Atomic Tool，因此首个 `ATOMIC_TOOL_CATALOG` 可以为空；保留这一概念是为了未来可控扩展，不是要求先创建无用途的空壳类。
+当前两个已确认场景暂时没有满足上述条件的 Atomic Tool，因此 `ATOMIC_TOOL_REGISTRY` 可以为空；保留这一概念是为了未来可控扩展，不是要求先创建无用途的空壳类。
 
 ### 11.2 一个 Tool 一个文件
 
 每个 Tool 必须是一个单独代码文件；一个文件只实现一个 Tool。例如：
 
 ```text
-orchestration/tools/
+business/tools/
 ├── start_smart_routing.py
 ├── start_knowledge_recommendation.py
 └── future_supplier_lookup.py
@@ -840,39 +1100,35 @@ orchestration/tools/
 
 ### 11.3 简单静态目录
 
-Tool 名称和给模型看的说明集中写在 `orchestration/catalog/catalog.py`。这样新增能力时可以在一处看到所有 Tool，也避免把提示说明散落到实现类中。
+每个场景的 Tool 名称和给模型看的说明写在自己的
+`scenarios/<scene>/definition.py` 的 `ScenarioDefinition` 中；
+`business/registry/scenarios.py` 只负责把这些完整定义汇总成一张总清单。这样描述不在 Tool
+类里，新增能力时既能从汇总文件看到所有定义，也能在场景目录中连续阅读依赖、Tool 和 Graph。
 
 推荐结构如下；实际开发可按最终 LangChain 1.x API 调整语法，但不得改变其静态、显式和易读的原则：
 
 ```python
-SCENARIO_CATALOG = {
-    "smart_routing": {
-        "display_name": "智能分流",
-        "description": "当用户希望购买商品，并需要推荐商品或采购方式时使用。",
-        "tool": start_smart_routing,
-    },
-    "knowledge_recommendation": {
-        "display_name": "知识推荐",
-        "description": "当用户希望查询采购知识、规则或说明时使用。",
-        "tool": start_knowledge_recommendation,
-    },
-}
+def build_scenario_registry(*, smart_routing, knowledge_recommendation):
+    """Business 的总清单，运行时由 Core 转换成只读 ScenarioRegistry。"""
 
-ATOMIC_TOOL_CATALOG = {}
+    return ScenarioRegistry((smart_routing, knowledge_recommendation))
+
+ATOMIC_TOOL_REGISTRY = {}
 ```
 
 这里的“注册”只是开发人员新增一条普通 Python 配置：
 
-1. 新建一个 Tool 文件。
-2. 在 `catalog.py` 中显式 import。
-3. 在字典中增加 `tool_id`、显示名、描述和对象引用。
-4. 在 `composition.py` 中为该 Tool 装配依赖。
+1. 新建一个 Tool 文件和对应场景的 `definition.py`。
+2. 在 `business/registry/scenarios.py` 中显式增加定义参数。
+3. 在 `business/bootstrap.py` 中为该 Tool/Graph 装配强类型依赖。
 
 不得使用运行时目录扫描、反射、数据库配置、聊天命令、任意 import 字符串、Manifest 或可变全局 Registry。目录只在进程启动时构造一次，并以只读对象提供给路由器。
 
 ### 11.4 ReAct 如何选择场景
 
-顶层 ReAct 只接收 `SCENARIO_CATALOG` 中的 Scenario Tool。模型根据每个 Tool 的描述选择场景，因此描述必须写清楚“何时使用”和“不适用的情况”。Atomic Tool 和 Delegate 不得暴露给顶层 ReAct。
+顶层 ReAct 只接收 Business `ScenarioRegistry` 中的 Scenario Tool 描述。模型根据每个 Tool
+的描述选择场景，因此描述必须写清楚“何时使用”和“不适用的情况”。Atomic Tool 和 Delegate
+不得暴露给顶层 ReAct。
 
 自然语言入口按以下顺序执行：
 
@@ -1476,16 +1732,16 @@ Domain 中定义有限且可判断的错误分类，例如：
 
 | `task_id` | 用途 | Prompt 文件 | 输出 |
 |---|---|---|---|
-| `scenario_router` | ReAct 选择 Scenario Tool | `prompts/scenario_router.md` | Tool 调用或澄清 |
-| `purchase_field_extraction` | 提取商品、用途、预算和币种 | `prompts/purchase_field_extraction.md` | 结构化字段 |
-| `product_search_terms` | 从商品名称和栏目拆解搜索词 | `prompts/product_search_terms.md` | 搜索词数组 |
-| `memory_update` | 根据完成的 Turn 生成个人记忆更新 | `prompts/memory_update.md` | 结构化记忆补丁 |
+| `scenario_router` | ReAct 选择 Scenario Tool | `business/prompts/scenario_router.md` | Tool 调用或澄清 |
+| `purchase_field_extraction` | 提取商品、用途、预算和币种 | `business/prompts/purchase_field_extraction.md` | 结构化字段 |
+| `product_search_terms` | 从商品名称和栏目拆解搜索词 | `business/prompts/product_search_terms.md` | 搜索词数组 |
+| `memory_update` | 根据完成的 Turn 生成个人记忆更新 | `business/prompts/memory_update.md` | 结构化记忆补丁 |
 
 每个模型任务只有一个主 Prompt 文件。运行时用户输入、页面上下文、Tool Schema 和长期记忆是该 Prompt 的输入数据，不算第二个 Prompt。不得按业务分支动态选择多个 Prompt 变体。
 
 ### 17.2 Prompt 如何引用
 
-`prompts/catalog.py` 使用常量把 `task_id` 显式映射到固定文件路径和输出模型。应用启动时统一加载并检查文件存在、非空、编码正确；生产请求不能根据用户输入拼接文件路径。
+`business/prompts/catalog.py` 使用常量把 `task_id` 显式映射到固定文件路径和输出模型。应用启动时统一加载并检查文件存在、非空、编码正确；生产请求不能根据用户输入拼接文件路径。
 
 示意：
 
@@ -1603,7 +1859,7 @@ ID 建议用不超过 64 字符的 UUID/ULID 字符串，避免依赖 OpenGauss 
 优先验证 LangGraph 官方 PostgreSQL Checkpointer 与目标 OpenGauss 版本的兼容性。兼容时：
 
 1. 在 `CheckpointDelegate` 内持有官方 Checkpointer 和专用连接池配置。
-2. 由 `composition.py` 把它传给 Graph 的 `compile(checkpointer=...)`。
+2. 由 `business/bootstrap.py` 把它传给 Graph 的 `compile(checkpointer=...)`。
 3. API 和业务节点不得直接引用官方 saver 或连接。
 4. 迁移脚本显式纳入其所需表，不允许生产启动时静默改表。
 
@@ -1921,7 +2177,8 @@ custom_purchase
 
 ### 22.1 后端配置
 
-所有配置由 `config.py` 的 Pydantic Settings 在启动时一次性校验。至少包含：
+所有环境变量由 `business/config/settings.py` 中的 `AppSettings` 在启动时一次性读取和校验；
+它再把 Core 与 Business 真正需要的字段分别转换成小型配置对象。至少包含：
 
 | 配置 | 默认/要求 |
 |---|---|
@@ -2097,10 +2354,8 @@ HTTP 客户端连接池和数据库连接池属于连接复用，不是业务缓
 
 ```text
 backend/src/procurement_assistant/
-├── main.py                              # 只调用 create_app，不创建隐藏全局依赖
-├── config.py                            # 全部 Settings 与启动校验
-├── composition.py                       # 创建生产 Delegate、Graph、运行器和 FastAPI
-├── api/
+├── main.py                              # 只调用 business.bootstrap，不创建隐藏全局依赖
+├── core/api/
 │   ├── app.py                           # create_app 与路由装配
 │   ├── dependencies.py                  # 身份和 HTTP 请求上下文
 │   ├── errors.py                        # Domain 错误到 HTTP/AG-UI 错误映射
@@ -2108,51 +2363,69 @@ backend/src/procurement_assistant/
 │   ├── sessions.py                      # 当前 thread snapshot
 │   ├── health.py                        # live/ready
 │   └── sse.py                           # AG-UI 事件编码和响应生成器
-└── protocol/
+└── core/protocol/
     ├── run_input.py                     # forwardedProps 的区分输入模型
-    ├── events.py                        # 采购 CUSTOM 事件 Pydantic 模型
-    ├── emitter.py                       # 内部事件到 AG-UI 的单向适配
+    ├── events.py                        # 与业务无关的文本、场景等通用内部事件
+    ├── emitter.py                       # 通用内部事件到 AG-UI 的单向适配
     └── snapshot.py                      # 只含前端恢复所需字段
 ```
 
+采购商品、选项、排队信息和页面跳转等业务事件位于
+`business/protocol/events.py`，由业务节点创建，再通过 Core 的通用发送器输出。Core 不认识
+这些 payload 的采购含义。
+
 `agent.py` 只执行固定接入步骤：校验输入和身份、调用应用层准入、把应用事件交给 SSE，
 并在流生成器 `finally` 释放进程容量和刷新 Trace。场景选择、Graph 恢复、Run 终态和租约
-释放由 `orchestration/application.py` 负责；采购节点不得写在路由文件中。
+释放由 `core/orchestration/application.py` 负责；采购节点不得写在路由文件中。
 
-### 25.2 编排
+### 25.2 Core 编排
 
 ```text
-orchestration/
+core/orchestration/
 ├── application.py                       # Run 准入后分发、总截止时间和统一收尾
 ├── runtime.py                           # ExecutionContext 与 Delegate 调用治理
 ├── graph_runner.py                      # invoke/stream、interrupt 和 Checkpoint 协调
 ├── actions.py                           # WaitRequest、Action 操作和签发定义
-├── action_inputs.py                     # Action/Form 的静态 Pydantic 输入模型
-├── wait_factory.py                      # 统一生成等待组、Action ID 和 24 小时到期时间
+├── action_registry.py                   # Business 注入的输入模型静态注册表
+├── resume.py                             # 通用 interrupt 恢复值
+├── wait_factory.py                      # 通用等待组、Action ID 和 24 小时有效期
+├── scenarios.py                          # ScenarioDefinition 和只读 ScenarioRegistry
 ├── models.py                            # 少量跨场景编排模型
 ├── router/
 │   ├── react_router.py                  # 顶层 ReAct，只使用 Scenario Tool
 │   └── scene_switch.py                  # 场景切换候选与确认
-├── catalog/
-│   └── catalog.py                       # 全部 Tool 的静态说明和对象引用
+```
+
+Core 只放以上通用文件。具体场景、Tool、业务 Action 和业务事件都在 Business：
+
+```text
+business/
+├── bootstrap.py                         # 唯一装配入口
+├── registry/
+│   ├── scenarios.py                     # 显式汇总 ScenarioDefinition
+│   ├── atomic_tools.py                  # Atomic Tool 显式注册（当前为空）
+│   ├── model_tasks.py                   # 业务模型任务 ID
+│   └── interactions.py                  # 表单模型和 Action 输入注册
+├── interaction/
+│   ├── operations.py                    # 业务操作编号
+│   ├── action_inputs.py                 # 业务输入模型和栏目候选校验
+│   └── wait_factory.py                  # 采购表单、选项和业务按钮
 ├── tools/
-│   ├── start_smart_routing.py           # 一个 Scenario Tool
-│   └── start_knowledge_recommendation.py # 一个 Scenario Tool
+│   ├── start_smart_routing.py           # 智能分流 Scenario Tool
+│   └── start_knowledge_recommendation.py # 知识推荐 Scenario Tool
 ├── scenarios/
 │   ├── smart_routing/
+│   │   ├── definition.py                # 依赖、说明、Tool 和 Graph 的完整定义
 │   │   ├── state.py                     # SmartRoutingState
-│   │   ├── nodes.py                     # 表 13.3 的节点
+│   │   ├── nodes.py                     # 采购业务节点
 │   │   ├── routes.py                    # 只根据结构化 State 分支
 │   │   └── graph.py                     # 显式 add_node/add_edge/compile 构图
-│   └── knowledge/
-│       ├── state.py                     # KnowledgeState
-│       ├── nodes.py                     # 收集、加载、精确匹配、展示
-│       └── graph.py                     # 确定性构图
-└── subgraphs/
-    └── product_recommendation/
-        ├── state.py                     # 推荐分页 State
-        ├── nodes.py                     # 语义拆词和调用已排序分页搜索
-        └── graph.py                     # 可嵌入智能分流的 Subgraph
+│   ├── knowledge/
+│   │   ├── definition.py                # 知识场景完整定义
+│   │   ├── state.py                     # KnowledgeState
+│   │   ├── nodes.py                     # 收集、加载、精确匹配、展示
+│   │   └── graph.py                     # 确定性构图
+│   └── subgraphs/product_recommendation/ # 业务内部商品搜索子图
 ```
 
 `graph.py` 必须能从上到下读出完整节点和边。不得用循环读取数据库配置生成 Graph，不得把边隐藏在装饰器副作用中。`nodes.py` 过长时可以按清晰业务阶段拆成多个文件，但不能创建一层只有转发作用的类。
@@ -2160,7 +2433,7 @@ orchestration/
 ### 25.3 Delegate 与 Prompt
 
 ```text
-delegates/
+core/delegates/
 ├── common/
 │   ├── call_context.py                  # trace、deadline 和 attempt
 │   ├── http_client.py                   # 连接池、超时、凭据和流读取
@@ -2168,32 +2441,36 @@ delegates/
 ├── model/
 │   ├── interface.py                     # ModelDelegate Protocol
 │   └── openai_compatible.py             # LangChain/OpenAI 兼容实现
-├── agents/
+business/delegates/agents/
 │   ├── ioi.py                           # IOI 接口与待映射生产实现
 │   ├── column_recognition.py            # 栏目接口与待映射生产实现
 │   └── duplicate_self_purchase.py       # 重复自采接口与待映射生产实现
-├── services/
+business/delegates/services/
 │   ├── product_search.py                # 搜索接口与分页结果
 │   ├── knowledge.py                     # 知识全集接口
 │   ├── cached_knowledge.py              # 单航班刷新和 10 分钟缓存
 │   └── queue.py                         # 排队数量接口
-└── database/
-    ├── interface.py                     # 不依赖 Psycopg 的 DatabaseDelegate 业务协议
+core/delegates/database/
+    ├── interface.py                     # 不依赖 Psycopg 的通用 DatabaseDelegate 协议
     ├── connection_types.py              # 全部数据库实现共用的字典行连接池类型
     ├── opengauss.py                     # Run、租约、场景、Action、消息和记忆的短事务 SQL
     ├── trace.py                         # 不依赖驱动的 TraceDelegate 协议
     ├── opengauss_trace.py               # span 批量写入 OpenGauss 的独立实现
     └── checkpoints.py                   # 官方 saver 的 OpenGauss 适配边界
 
-prompts/
-├── catalog.py                           # task_id 到固定文件的只读映射
+business/prompts/
+├── catalog.py                           # Business 任务 ID 到固定文件的只读映射
 ├── scenario_router.md                   # 一个任务一个 Prompt
 ├── purchase_field_extraction.md
 ├── product_search_terms.md
 └── memory_update.md
 ```
 
-`opengauss.py` 按“Run 入口事务、Thread/场景/Action、展示内容/记忆、事务内辅助函数”设置
+`core/api/sessions.py` 只实现“按策略保留最新 UI 块”的通用算法；业务事件名称白名单由
+`business/protocol/snapshot.py` 的 `ProcurementSnapshotPolicy` 注入。新增业务事件时，
+只需在 Business 策略中决定是否可恢复，不需要修改 Core 会话接口。
+
+`core/delegates/database/opengauss.py` 按“Run 入口事务、Thread/场景/Action、展示内容/记忆、事务内辅助函数”设置
 清楚分区。`begin_run` 需要在一个事务中同时处理租约、Action 和 Run，因此当前保留在同一
 实现类中，便于从上到下审核原子性；Trace 已拆到独立文件。不得仅为减少行数引入多重
 Mixin 或无业务含义的转发类。未来只有在真实 OpenGauss 集成测试覆盖跨模块事务后，才可
@@ -2208,19 +2485,21 @@ Mixin 或无业务含义的转发类。未来只有在真实 OpenGauss 集成测
 ### 25.4 Domain、Trace 和 Shared
 
 ```text
-domain/
+business/domain/
+└── procurement.py                       # 商品、栏目、预算等纯数据模型
+
+core/domain/
 ├── identifiers.py                       # 强约束 ID 值模型
-├── procurement.py                       # 商品、栏目、预算等纯数据模型
 ├── lifecycle.py                         # 场景/Run/Action 状态枚举
 └── errors.py                            # 与框架无关的错误
 
-observability/
+core/observability/
 ├── models.py                            # Span 类型、状态与完整耗时字段
 ├── collector.py                         # 请求局部收集器、父子上下文和 async 计时器
 ├── flusher.py                           # Trace 尽力而为批量落库及 flush 耗时
 └── checkpointer.py                      # 给官方 Saver 增加 Checkpoint 数据库 span
 
-shared/
+core/shared/
 ├── clock.py                             # 可测试 UTC 时钟
 └── ids.py                               # UUID/ULID 生成
 ```
@@ -2229,14 +2508,14 @@ shared/
 
 ### 25.5 Composition Root 的装配顺序
 
-`composition.py` 必须按显式顺序创建：
+`business/bootstrap.py` 必须按显式顺序创建：
 
 1. 校验 Settings。
 2. 创建时钟、ID 生成器和连接池。
 3. 创建 Database/Checkpoint Delegate。
 4. 创建公共 HTTP 客户端。
 5. 创建 Model、Agent 和 Service Delegate。
-6. 创建 Prompt Catalog 和静态 Tool Catalog。
+6. 创建 Prompt Catalog、Scenario Registry、Atomic Tool Registry 和交互 Registry。
 7. 用构造函数把所需 Delegate 传入 Node/Tool。
 8. 构建并编译 Subgraph，再构建两个 Scenario Graph。
 9. 创建 ReAct 路由器、Graph Runner、协议发送器和 FastAPI。
