@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>采购智能助手数据库类图</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --page: #f3f6fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --ink: #172033;
+      --muted: #5e6b7e;
+      --faint: #8a97a8;
+      --line: #9aa8ba;
+      --border: #d8e1ec;
+      --core: #2563eb;
+      --core-soft: #eff6ff;
+      --control: #0f766e;
+      --control-soft: #ecfdf5;
+      --memory: #a16207;
+      --memory-soft: #fffbeb;
+      --trace: #be123c;
+      --trace-soft: #fff1f2;
+      --checkpoint: #7c3aed;
+      --checkpoint-soft: #f5f3ff;
+    }
+
+    body {
+      background: var(--page);
+      color: var(--ink);
+      font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+      min-height: 100vh;
+      padding: 28px;
+    }
+
+    .container { max-width: 1740px; margin: 0 auto; }
+    .header { margin-bottom: 18px; }
+    .header-row { align-items: center; display: flex; gap: 12px; }
+    .pulse-dot {
+      background: #2563eb;
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px #dbeafe;
+      height: 11px;
+      width: 11px;
+    }
+    h1 { color: #152238; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 8px 0 0 23px; }
+
+    .toolbar { align-items: center; display: flex; gap: 8px; margin-left: auto; }
+    .toolbar-toggle {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: #64748b;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 20px;
+      line-height: 1;
+      padding: 3px 8px;
+    }
+    .toolbar-toggle:hover { background: #e8eef7; border-color: #cbd5e1; color: #334155; }
+    .toolbar-actions { display: none; gap: 6px; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      color: #475569;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 9px;
+      white-space: nowrap;
+    }
+    .toolbar-actions button:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+
+    .diagram-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(36, 61, 92, 0.08);
+      overflow: auto;
+      padding: 14px;
+    }
+    svg { display: block; min-width: 1240px; width: 100%; }
+    .class-title { fill: #172033; font-size: 14px; font-weight: 700; text-anchor: middle; }
+    .class-stereotype { fill: #64748b; font-size: 10px; text-anchor: middle; }
+    .field { fill: #334155; font-size: 10px; }
+    .field-key { fill: #1d4ed8; font-weight: 700; }
+    .field-note { fill: #64748b; font-size: 9px; }
+    .group-label { font-size: 13px; font-weight: 700; }
+    .group-note { fill: #64748b; font-size: 10px; }
+    .relation { fill: none; marker-end: url(#arrowhead); stroke: #718096; stroke-width: 1.35; }
+    .relation-logical { stroke-dasharray: 6 4; }
+    .relation-checkpoint { stroke: #7c3aed; stroke-dasharray: 5 4; }
+    .relation-label { fill: #64748b; font-size: 9px; font-weight: 500; }
+    .multiplicity { fill: #334155; font-size: 9px; font-weight: 700; }
+    .legend-text { fill: #526175; font-size: 10px; }
+
+    .cards { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(36, 61, 92, 0.05);
+      padding: 15px;
+    }
+    .card-header { align-items: center; display: flex; gap: 8px; margin-bottom: 9px; }
+    .card-dot { border-radius: 50%; height: 8px; width: 8px; }
+    .card-dot.blue { background: var(--core); }
+    .card-dot.green { background: var(--control); }
+    .card-dot.purple { background: var(--checkpoint); }
+    .card h3 { color: #1e293b; font-size: 12px; }
+    .card ul { color: var(--muted); font-size: 10px; line-height: 1.7; list-style: none; }
+    .card li { margin-bottom: 3px; }
+    .footer { color: #7b8797; font-size: 10px; margin-top: 14px; text-align: center; }
+
+    @media (max-width: 800px) {
+      body { padding: 14px; }
+      h1 { font-size: 17px; }
+      .subtitle { font-size: 11px; }
+      .cards { grid-template-columns: 1fr; }
+    }
+    @media print {
+      body { background: #ffffff; padding: 8px; }
+      .toolbar { display: none !important; }
+      .diagram-container, .card { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot" aria-hidden="true"></div>
+        <h1>采购智能助手 · 数据库 / 领域类图</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 复制图片</button>
+            <button onclick="downloadPNG(this)">🖼️ 下载 PNG</button>
+            <button onclick="downloadPDF(this)">📄 下载 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="导出选项" aria-label="导出选项">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">以当前 001/002 迁移为事实来源；展示 13 个持久化类、关键字段和逻辑关系。虚线表示应用/Delegate 维护的逻辑关联，不代表物理外键。</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 2200 1510" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">采购智能助手数据库类图</title>
+        <desc id="diagram-desc">左侧是九个助手业务类，右侧是四个 LangGraph Checkpoint 类，箭头表示主要逻辑关联。</desc>
+        <defs>
+          <marker id="arrowhead" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+            <polygon points="0 0, 9 3.5, 0 7" fill="#718096"></polygon>
+          </marker>
+          <marker id="checkpoint-arrowhead" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+            <polygon points="0 0, 9 3.5, 0 7" fill="#7c3aed"></polygon>
+          </marker>
+          <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+            <path d="M 36 0 L 0 0 0 36" fill="none" stroke="#e8eef6" stroke-width="0.7"></path>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#fbfdff"></rect>
+        <rect width="100%" height="100%" fill="url(#grid)"></rect>
+
+        <!-- 两个大边界：业务领域与 Checkpoint 基础设施。 -->
+        <rect x="28" y="54" width="1430" height="1405" rx="16" fill="#f8fbff" stroke="#93c5fd" stroke-width="1.5" stroke-dasharray="9 5"></rect>
+        <text x="50" y="82" class="group-label" fill="#1d4ed8">助手业务领域</text>
+        <text x="50" y="101" class="group-note">会话、场景、Run、交互、记忆和耗时记录</text>
+
+        <rect x="1480" y="54" width="692" height="1405" rx="16" fill="#fbfaff" stroke="#c4b5fd" stroke-width="1.5" stroke-dasharray="9 5"></rect>
+        <text x="1502" y="82" class="group-label" fill="#6d28d9">LangGraph Checkpoint 边界</text>
+        <text x="1502" y="101" class="group-note">由 langgraph-checkpoint-postgres 3.1.1 读写，当前未建立物理外键</text>
+
+        <!-- 关系线先绘制，之后由不透明类框遮挡，保证线不会穿过文字。 -->
+        <g aria-label="类之间的逻辑关联">
+          <!-- assistant_threads 是会话根。 -->
+          <path class="relation" d="M460 240 L490 240 L490 130 L970 130 L970 218 L1000 218"></path>
+          <text x="715" y="123" class="relation-label" text-anchor="middle">thread_id · Run 时间线</text>
+
+          <path class="relation" d="M460 262 L520 262"></path>
+          <text x="490" y="251" class="multiplicity" text-anchor="middle">1 : 0..*</text>
+
+          <path class="relation" d="M265 365 L265 430"></path>
+          <text x="278" y="405" class="relation-label">lease</text>
+
+          <path class="relation" d="M70 255 L48 255 L48 750 L70 750"></path>
+          <text x="56" y="520" class="relation-label" transform="rotate(-90 56 520)">thread_id</text>
+
+          <path class="relation" d="M460 337 L488 337 L488 490 L970 490 L970 578 L1000 578"></path>
+          <text x="735" y="482" class="relation-label" text-anchor="middle">消息 / UI 块归属</text>
+
+          <!-- 场景、Action 和 Run 的执行关系。 -->
+          <path class="relation" d="M730 475 L730 515"></path>
+          <text x="746" y="499" class="relation-label">wait_group_id</text>
+
+          <path class="relation" d="M940 302 L1000 302"></path>
+          <text x="970" y="291" class="multiplicity" text-anchor="middle">1 : 0..*</text>
+
+          <path class="relation" d="M1195 455 L1195 500"></path>
+          <text x="1212" y="482" class="relation-label">run_id</text>
+
+          <!-- 记忆来源和 Trace 关系。 -->
+          <path class="relation relation-logical" d="M940 1010 L970 1010 L970 390 L1000 390"></path>
+          <text x="985" y="700" class="relation-label" transform="rotate(-90 985 700)">source_run_id</text>
+
+          <path class="relation" d="M1000 885 L970 885 L970 420 L1000 420"></path>
+          <text x="955" y="660" class="relation-label" transform="rotate(-90 955 660)">run_id · trace_spans</text>
+
+          <!-- trace_spans 自关联：根 Span 没有 parent_span_id，其余 Span 指向父 Span。 -->
+          <path class="relation relation-logical" d="M1390 930 L1430 930 L1430 1110 L1390 1110"></path>
+          <text x="1441" y="1028" class="relation-label" transform="rotate(90 1441 1028)">parent_span_id</text>
+
+          <!-- 业务类与 Checkpoint 类的逻辑关联。 -->
+          <path class="relation relation-checkpoint" style="marker-end:url(#checkpoint-arrowhead)" d="M390 155 L390 120 L1500 120 L1500 360 L1540 360"></path>
+          <text x="1320" y="113" class="relation-label" fill="#7c3aed">thread_id</text>
+
+          <path class="relation relation-checkpoint" style="marker-end:url(#checkpoint-arrowhead)" d="M940 182 L1470 182 L1470 405 L1540 405"></path>
+          <text x="1190" y="174" class="relation-label" fill="#7c3aed">checkpoint_ns = scenario_instance_id</text>
+
+          <path class="relation relation-checkpoint" style="marker-end:url(#checkpoint-arrowhead)" d="M1830 535 L1830 600"></path>
+          <text x="1847" y="574" class="relation-label" fill="#7c3aed">channel + version</text>
+
+          <path class="relation relation-checkpoint" style="marker-end:url(#checkpoint-arrowhead)" d="M2120 445 L2150 445 L2150 915 L2120 915"></path>
+          <text x="2162" y="700" class="relation-label" fill="#7c3aed" transform="rotate(90 2162 700)">checkpoint_id</text>
+        </g>
+
+        <!-- 业务类：白底遮挡关系线，字段按“主键 / 类型 / 作用”表达。 -->
+        <g class="uml-class">
+          <rect x="70" y="155" width="390" height="210" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.7"></rect>
+          <rect x="70" y="155" width="390" height="49" rx="8" fill="#eff6ff"></rect>
+          <line x1="70" y1="204" x2="460" y2="204" stroke="#bfdbfe"></line>
+          <text x="265" y="176" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：会话归属与当前活动场景</text>
+          <text x="265" y="194" class="class-title">assistant_threads</text>
+          <text x="84" y="225" class="field"><tspan class="field-key">[PK]</tspan> thread_id : VARCHAR(80)</text>
+          <text x="84" y="247" class="field">user_id : VARCHAR(128)</text>
+          <text x="84" y="269" class="field">active_scenario_instance_id : VARCHAR(80)?</text>
+          <text x="84" y="291" class="field">created_at : TIMESTAMPTZ</text>
+          <text x="84" y="313" class="field">updated_at : TIMESTAMPTZ</text>
+          <text x="84" y="346" class="field-note">会话归属、当前活动场景指针</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="520" y="155" width="420" height="320" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.7"></rect>
+          <rect x="520" y="155" width="420" height="49" rx="8" fill="#eff6ff"></rect>
+          <line x1="520" y1="204" x2="940" y2="204" stroke="#bfdbfe"></line>
+          <text x="730" y="176" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：可暂停、恢复和结束的 DAG 场景</text>
+          <text x="730" y="194" class="class-title">scenario_instances</text>
+          <text x="534" y="225" class="field"><tspan class="field-key">[PK]</tspan> scenario_instance_id : VARCHAR(80)</text>
+          <text x="534" y="245" class="field">thread_id : VARCHAR(80)</text>
+          <text x="534" y="265" class="field">user_id : VARCHAR(128)</text>
+          <text x="534" y="285" class="field">scenario_id : VARCHAR(100)</text>
+          <text x="534" y="305" class="field">input_source : VARCHAR(32)</text>
+          <text x="534" y="325" class="field">status : VARCHAR(32)</text>
+          <text x="534" y="345" class="field">started_at / updated_at : TIMESTAMPTZ</text>
+          <text x="534" y="365" class="field">expires_at : TIMESTAMPTZ</text>
+          <text x="534" y="385" class="field">current_wait_group_id : VARCHAR(80)?</text>
+          <text x="534" y="405" class="field">ended_at : TIMESTAMPTZ?</text>
+          <text x="534" y="425" class="field">end_reason : VARCHAR(100)?</text>
+          <text x="534" y="458" class="field-note">DAG 场景跨 Turn 暂停、恢复和结束</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="1000" y="155" width="390" height="300" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.7"></rect>
+          <rect x="1000" y="155" width="390" height="49" rx="8" fill="#eff6ff"></rect>
+          <line x1="1000" y1="204" x2="1390" y2="204" stroke="#bfdbfe"></line>
+          <text x="1195" y="176" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：请求幂等、执行审计与 Trace 关联</text>
+          <text x="1195" y="194" class="class-title">assistant_runs</text>
+          <text x="1014" y="225" class="field"><tspan class="field-key">[PK]</tspan> run_id : VARCHAR(80)</text>
+          <text x="1014" y="245" class="field">thread_id / user_id : VARCHAR</text>
+          <text x="1014" y="265" class="field">trace_id : VARCHAR(80)</text>
+          <text x="1014" y="285" class="field">input_type : VARCHAR(64)</text>
+          <text x="1014" y="305" class="field">scenario_instance_id : VARCHAR(80)?</text>
+          <text x="1014" y="325" class="field">status : VARCHAR(32)</text>
+          <text x="1014" y="345" class="field">started_at : TIMESTAMPTZ</text>
+          <text x="1014" y="365" class="field">finished_at : TIMESTAMPTZ?</text>
+          <text x="1014" y="385" class="field">error_code : VARCHAR(100)?</text>
+          <text x="1014" y="430" class="field-note">Run 幂等、状态审计和 Trace 根关联</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="70" y="430" width="390" height="170" rx="8" fill="#ffffff" stroke="#0f766e" stroke-width="1.7"></rect>
+          <rect x="70" y="430" width="390" height="49" rx="8" fill="#ecfdf5"></rect>
+          <line x1="70" y1="479" x2="460" y2="479" stroke="#a7f3d0"></line>
+          <text x="265" y="451" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：同一会话的短租约与串行控制</text>
+          <text x="265" y="469" class="class-title">thread_execution_leases</text>
+          <text x="84" y="500" class="field"><tspan class="field-key">[PK]</tspan> thread_id : VARCHAR(80)</text>
+          <text x="84" y="522" class="field">run_id : VARCHAR(80)</text>
+          <text x="84" y="544" class="field">expires_at : TIMESTAMPTZ</text>
+          <text x="84" y="580" class="field-note">短租约；保证同一会话串行处理</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="520" y="515" width="420" height="350" rx="8" fill="#ffffff" stroke="#0f766e" stroke-width="1.7"></rect>
+          <rect x="520" y="515" width="420" height="49" rx="8" fill="#ecfdf5"></rect>
+          <line x1="520" y1="564" x2="940" y2="564" stroke="#a7f3d0"></line>
+          <text x="730" y="536" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：按钮、表单和一次性用户操作</text>
+          <text x="730" y="554" class="class-title">pending_actions</text>
+          <text x="534" y="585" class="field"><tspan class="field-key">[PK]</tspan> action_id : VARCHAR(80)</text>
+          <text x="534" y="605" class="field">wait_group_id : VARCHAR(80)</text>
+          <text x="534" y="625" class="field">thread_id / user_id : VARCHAR</text>
+          <text x="534" y="645" class="field">scenario_instance_id : VARCHAR(80)</text>
+          <text x="534" y="665" class="field">kind : VARCHAR(64)</text>
+          <text x="534" y="685" class="field">input_schema_id : VARCHAR(100)</text>
+          <text x="534" y="705" class="field">status : VARCHAR(32)</text>
+          <text x="534" y="725" class="field">payload_json : JSONB</text>
+          <text x="534" y="745" class="field">created_at / expires_at : TIMESTAMPTZ</text>
+          <text x="534" y="765" class="field">consumed_at : TIMESTAMPTZ?</text>
+          <text x="534" y="785" class="field">consumed_by_run_id : VARCHAR(80)?</text>
+          <text x="534" y="818" class="field-note">一次性按钮、表单、栏目选择和重试操作</text>
+          <text x="534" y="840" class="field-note">最终消费必须在短事务中复查</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="1000" y="500" width="390" height="200" rx="8" fill="#ffffff" stroke="#0f766e" stroke-width="1.7"></rect>
+          <rect x="1000" y="500" width="390" height="49" rx="8" fill="#ecfdf5"></rect>
+          <line x1="1000" y1="549" x2="1390" y2="549" stroke="#a7f3d0"></line>
+          <text x="1195" y="521" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：用户与助手可展示的消息历史</text>
+          <text x="1195" y="539" class="class-title">assistant_messages</text>
+          <text x="1014" y="570" class="field"><tspan class="field-key">[PK]</tspan> message_id : VARCHAR(100)</text>
+          <text x="1014" y="590" class="field">thread_id / user_id / run_id : VARCHAR</text>
+          <text x="1014" y="610" class="field">role : VARCHAR(32)</text>
+          <text x="1014" y="630" class="field">content : TEXT</text>
+          <text x="1014" y="650" class="field">created_at : TIMESTAMPTZ</text>
+          <text x="1014" y="684" class="field-note">用户消息与可展示助手文字</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="70" y="665" width="390" height="170" rx="8" fill="#ffffff" stroke="#0f766e" stroke-width="1.7"></rect>
+          <rect x="70" y="665" width="390" height="49" rx="8" fill="#ecfdf5"></rect>
+          <line x1="70" y1="714" x2="460" y2="714" stroke="#a7f3d0"></line>
+          <text x="265" y="686" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：页面恢复所需的结构化 UI 事件</text>
+          <text x="265" y="704" class="class-title">assistant_ui_blocks</text>
+          <text x="84" y="735" class="field"><tspan class="field-key">[PK]</tspan> block_id : BIGSERIAL</text>
+          <text x="84" y="757" class="field">thread_id / user_id : VARCHAR</text>
+          <text x="84" y="779" class="field">block_json : JSONB</text>
+          <text x="84" y="801" class="field">created_at : TIMESTAMPTZ</text>
+          <text x="84" y="825" class="field-note">通过协议校验后的结构化 UI CUSTOM 事件</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="520" y="915" width="420" height="180" rx="8" fill="#ffffff" stroke="#a16207" stroke-width="1.7"></rect>
+          <rect x="520" y="915" width="420" height="49" rx="8" fill="#fffbeb"></rect>
+          <line x1="520" y1="964" x2="940" y2="964" stroke="#fde68a"></line>
+          <text x="730" y="936" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：用户个人长期记忆与更新状态</text>
+          <text x="730" y="954" class="class-title">user_memories</text>
+          <text x="534" y="985" class="field"><tspan class="field-key">[PK]</tspan> user_id : VARCHAR(128)</text>
+          <text x="534" y="1007" class="field">memory_json : JSONB</text>
+          <text x="534" y="1029" class="field">source_run_id : VARCHAR(80)?</text>
+          <text x="534" y="1051" class="field">updated_at : TIMESTAMPTZ</text>
+          <text x="534" y="1073" class="field">last_error : VARCHAR(1000)?</text>
+          <text x="534" y="1089" class="field-note">仅用于非关键的个性化表达和推荐辅助</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="1000" y="745" width="390" height="440" rx="8" fill="#ffffff" stroke="#be123c" stroke-width="1.7"></rect>
+          <rect x="1000" y="745" width="390" height="49" rx="8" fill="#fff1f2"></rect>
+          <line x1="1000" y1="794" x2="1390" y2="794" stroke="#fecdd3"></line>
+          <text x="1195" y="766" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：全链路调用耗时、输入输出与错误</text>
+          <text x="1195" y="784" class="class-title">trace_spans</text>
+          <text x="1014" y="815" class="field"><tspan class="field-key">[PK]</tspan> span_id : VARCHAR(80)</text>
+          <text x="1014" y="833" class="field">trace_id : VARCHAR(80)</text>
+          <text x="1014" y="851" class="field">parent_span_id : VARCHAR(80)?</text>
+          <text x="1014" y="869" class="field">run_id / thread_id / user_id : VARCHAR</text>
+          <text x="1014" y="887" class="field">span_kind : VARCHAR(32)</text>
+          <text x="1014" y="905" class="field">name : VARCHAR(200)</text>
+          <text x="1014" y="923" class="field">target : VARCHAR(200)?</text>
+          <text x="1014" y="941" class="field">attempt : INTEGER</text>
+          <text x="1014" y="959" class="field">status : VARCHAR(32)</text>
+          <text x="1014" y="977" class="field">started_at / finished_at : TIMESTAMPTZ</text>
+          <text x="1014" y="995" class="field">duration_ms : DOUBLE PRECISION?</text>
+          <text x="1014" y="1013" class="field">first_byte_ms : DOUBLE PRECISION?</text>
+          <text x="1014" y="1031" class="field">first_text_delta_ms : DOUBLE PRECISION?</text>
+          <text x="1014" y="1049" class="field">final_result_ms : DOUBLE PRECISION?</text>
+          <text x="1014" y="1067" class="field">input_json / output_json : JSONB?</text>
+          <text x="1014" y="1085" class="field">error_code : VARCHAR(100)?</text>
+          <text x="1014" y="1103" class="field">attributes_json : JSONB</text>
+          <text x="1014" y="1138" class="field-note">根 Span、节点、模型、外围 Agent、Delegate 的完整耗时链</text>
+          <text x="1014" y="1158" class="field-note">parent_span_id 形成父子调用树</text>
+        </g>
+
+        <!-- Checkpoint 类。 -->
+        <g class="uml-class">
+          <rect x="1540" y="155" width="580" height="115" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.7"></rect>
+          <rect x="1540" y="155" width="580" height="49" rx="8" fill="#f5f3ff"></rect>
+          <line x1="1540" y1="204" x2="2120" y2="204" stroke="#ddd6fe"></line>
+          <text x="1830" y="176" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：记录 Checkpointer 已执行迁移版本</text>
+          <text x="1830" y="194" class="class-title">checkpoint_migrations</text>
+          <text x="1554" y="235" class="field"><tspan class="field-key">[PK]</tspan> v : INTEGER</text>
+          <text x="1554" y="257" class="field-note">记录 Checkpointer 已执行的迁移版本 0–9</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="1540" y="320" width="580" height="215" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.7"></rect>
+          <rect x="1540" y="320" width="580" height="49" rx="8" fill="#f5f3ff"></rect>
+          <line x1="1540" y1="369" x2="2120" y2="369" stroke="#ddd6fe"></line>
+          <text x="1830" y="341" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：保存 LangGraph 可恢复执行状态</text>
+          <text x="1830" y="359" class="class-title">checkpoints</text>
+          <text x="1554" y="400" class="field"><tspan class="field-key">[PK]</tspan> thread_id + checkpoint_ns + checkpoint_id</text>
+          <text x="1554" y="421" class="field">parent_checkpoint_id : TEXT?</text>
+          <text x="1554" y="442" class="field">type : TEXT?</text>
+          <text x="1554" y="463" class="field">checkpoint : JSONB</text>
+          <text x="1554" y="484" class="field">metadata : JSONB</text>
+          <text x="1554" y="520" class="field-note">thread_id 对应会话；checkpoint_ns 对应场景实例</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="1540" y="600" width="580" height="185" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.7"></rect>
+          <rect x="1540" y="600" width="580" height="49" rx="8" fill="#f5f3ff"></rect>
+          <line x1="1540" y1="649" x2="2120" y2="649" stroke="#ddd6fe"></line>
+          <text x="1830" y="621" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：保存各状态通道的序列化值</text>
+          <text x="1830" y="639" class="class-title">checkpoint_blobs</text>
+          <text x="1554" y="680" class="field"><tspan class="field-key">[PK]</tspan> thread_id + checkpoint_ns + channel + version</text>
+          <text x="1554" y="701" class="field">type : TEXT</text>
+          <text x="1554" y="722" class="field">blob : BYTEA?</text>
+          <text x="1554" y="760" class="field-note">保存各 Graph channel 的二进制序列化值</text>
+        </g>
+
+        <g class="uml-class">
+          <rect x="1540" y="860" width="580" height="235" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.7"></rect>
+          <rect x="1540" y="860" width="580" height="49" rx="8" fill="#f5f3ff"></rect>
+          <line x1="1540" y1="909" x2="2120" y2="909" stroke="#ddd6fe"></line>
+          <text x="1830" y="881" class="class-stereotype">&lt;&lt;table&gt;&gt; 表作用：保存暂停恢复所需的任务写入</text>
+          <text x="1830" y="899" class="class-title">checkpoint_writes</text>
+          <text x="1554" y="940" class="field"><tspan class="field-key">[PK]</tspan> thread_id + checkpoint_ns + checkpoint_id</text>
+          <text x="1554" y="960" class="field">task_id + idx : TEXT / INTEGER</text>
+          <text x="1554" y="980" class="field">task_path : TEXT</text>
+          <text x="1554" y="1000" class="field">channel : TEXT</text>
+          <text x="1554" y="1020" class="field">type : TEXT?</text>
+          <text x="1554" y="1040" class="field">blob : BYTEA</text>
+          <text x="1554" y="1075" class="field-note">支持 interrupt/resume 和任务级 pending writes</text>
+        </g>
+
+        <!-- 图例放在两个边界内部的底部空白区，不遮挡任何类。 -->
+        <g aria-label="图例">
+          <text x="54" y="1385" class="group-label" fill="#334155">图例</text>
+          <rect x="54" y="1400" width="18" height="12" rx="2" fill="#eff6ff" stroke="#2563eb"></rect>
+          <text x="80" y="1410" class="legend-text">核心领域类</text>
+          <rect x="190" y="1400" width="18" height="12" rx="2" fill="#ecfdf5" stroke="#0f766e"></rect>
+          <text x="216" y="1410" class="legend-text">交互与并发类</text>
+          <rect x="350" y="1400" width="18" height="12" rx="2" fill="#fffbeb" stroke="#a16207"></rect>
+          <text x="376" y="1410" class="legend-text">长期记忆类</text>
+          <rect x="490" y="1400" width="18" height="12" rx="2" fill="#fff1f2" stroke="#be123c"></rect>
+          <text x="516" y="1410" class="legend-text">可观测性类</text>
+          <rect x="648" y="1400" width="18" height="12" rx="2" fill="#f5f3ff" stroke="#7c3aed"></rect>
+          <text x="674" y="1410" class="legend-text">Checkpoint 类</text>
+          <line x1="810" y1="1406" x2="850" y2="1406" class="relation"></line>
+          <text x="860" y="1410" class="legend-text">实线：主要归属关系</text>
+          <line x1="1040" y1="1406" x2="1080" y2="1406" class="relation relation-logical"></line>
+          <text x="1090" y="1410" class="legend-text">虚线：逻辑关联</text>
+          <text x="54" y="1438" class="legend-text">[PK] = 主键；? = 可为空；复合主键用“+”连接。所有跨表归属由 Delegate 和短事务校验维护。</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot blue"></div><h3>核心建模原则</h3></div>
+        <ul>
+          <li>• 每张持久化表抽象为一个类，表名保留为类名。</li>
+          <li>• 只画关键字段和字段类型，完整字段说明以 Excel 为准。</li>
+          <li>• 不创建物理外键；跨表归属与状态转换由 Delegate + 短事务保证。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot green"></div><h3>运行时关系</h3></div>
+        <ul>
+          <li>• 一个会话可以产生多个场景和 Run，但同一会话通过租约串行执行。</li>
+          <li>• 场景等待点签发一组互斥 Action，消费时必须复查用户、场景和状态。</li>
+          <li>• Trace Span 按 trace_id / parent_span_id 组成完整调用树。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot purple"></div><h3>Checkpoint 边界</h3></div>
+        <ul>
+          <li>• Checkpoint 使用 thread_id + scenario_instance_id 隔离会话和场景。</li>
+          <li>• blobs 保存 channel 序列化值，writes 保存任务级 pending writes。</li>
+          <li>• 当前以 langgraph-checkpoint-postgres 3.1.1 为结构基线，OpenGauss 仍需实测验收。</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">Procurement Assistant · Class diagram generated from backend/migrations/001_assistant_core.sql and 002_langgraph_checkpoint.sql</p>
+  </div>
+
+  <script>
+    async function captureReport() {
+      const element = document.getElementById('report-container');
+      const rect = element.getBoundingClientRect();
+      const padding = 32;
+      return html2canvas(document.body, {
+        backgroundColor: '#f3f6fb',
+        scale: 2,
+        useCORS: true,
+        x: rect.left + window.scrollX - padding,
+        y: rect.top + window.scrollY - padding,
+        width: rect.width + padding * 2,
+        height: rect.height + padding * 2,
+        ignoreElements: (element) => element.classList && element.classList.contains('toolbar'),
+      });
+    }
+
+    async function copyAsImage(button) {
+      const original = button.textContent;
+      try {
+        const canvas = await captureReport();
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        button.textContent = '✓ 已复制';
+      } catch (error) {
+        button.textContent = '✗ 复制失败';
+      }
+      setTimeout(() => { button.textContent = original; }, 2000);
+    }
+
+    async function downloadPNG(button) {
+      const original = button.textContent;
+      button.textContent = '⏳ 生成中';
+      try {
+        const canvas = await captureReport();
+        const link = document.createElement('a');
+        link.download = 'procurement_assistant_class_diagram.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        button.textContent = '✓ 已下载';
+      } catch (error) {
+        button.textContent = '✗ 下载失败';
+      }
+      setTimeout(() => { button.textContent = original; }, 2000);
+    }
+
+    async function downloadPDF(button) {
+      const original = button.textContent;
+      button.textContent = '⏳ 生成中';
+      try {
+        const canvas = await captureReport();
+        const image = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(image, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('procurement_assistant_class_diagram.pdf');
+        button.textContent = '✓ 已下载';
+      } catch (error) {
+        button.textContent = '✗ 下载失败';
+      }
+      setTimeout(() => { button.textContent = original; }, 2000);
+    }
+  </script>
+</body>
+</html>
