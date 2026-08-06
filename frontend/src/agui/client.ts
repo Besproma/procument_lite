@@ -56,9 +56,10 @@ export interface AgentClientOptions {
 /**
  * 读取 POST 响应中的 SSE frame，并逐条产出已经通过 Zod 的 AG-UI 事件。
  *
- * 当前实现保持在一个小适配文件中，是因为此开发环境无法安装并验证最新
- * `@ag-ui/client` 的确切 HttpAgent API。协议字段仍完全使用 AG-UI；联网锁定依赖后，
- * 只需替换此文件并运行契约测试，页面 reducer 和业务组件无需改变。
+ * 当前实现保持在一个小适配文件中：它只实现浏览器需要的 POST + SSE 协议适配，
+ * 不把某个前端框架或某个 AG-UI SDK 的运行时对象暴露给页面组件。协议字段仍完全
+ * 使用 AG-UI；如果未来更换官方 TypeScript SDK，只需替换此文件并运行契约测试，
+ * Vue 页面、reducer 和业务组件无需改变。
  */
 export class ProcurementAgentClient {
   constructor(private readonly options: AgentClientOptions) {}

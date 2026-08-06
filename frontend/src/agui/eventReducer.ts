@@ -78,7 +78,7 @@ export function beginRunState(
     error: null,
     protocolError: null,
     // 新 Run 开始时丢弃上一 Run 尚未执行的导航副作用。否则旧 SSE 连接如果稍后
-    // 才结束，React effect 可能在新场景执行期间把用户带到旧目标页面。
+    // 才结束，Vue 的 watch 可能在新场景执行期间把用户带到旧目标页面。
     pendingNavigation: null,
     agentStreams: [],
     lastCustomSequence: 0,
@@ -151,7 +151,7 @@ function applyProcurementEvent(
  */
 export function reduceAGUIEvent(state: AssistantViewState, event: AGUIEvent): AssistantViewState {
   // reducer 可以理解成“事件翻译器”：后端只发送标准事件，它在这里决定页面状态如何
-  // 改变。React 组件读取新状态后自动重新渲染，最终让用户看到文字、表单、商品或按钮。
+  // 改变。Vue 组件读取新状态后自动重新渲染，最终让用户看到文字、表单、商品或按钮。
   switch (event.type) {
     case "RUN_STARTED":
       if (event.threadId !== state.threadId || event.runId !== state.currentRunId) {

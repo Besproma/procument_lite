@@ -5,7 +5,7 @@
 核心技术路线：
 
 - Python 3.12、FastAPI、LangGraph 和 LangChain。
-- React、TypeScript、Vite、Ant Design 和 AG-UI。
+- Vue 3、TypeScript、Vite、Ant Design Vue 和 AG-UI。
 - OpenGauss 保存 Checkpoint、会话、长期记忆及调用链。
 - ReAct 只负责自然语言场景路由，关键采购流程使用确定性 LangGraph DAG。
 - 所有外围 Agent、模型、外部服务和数据库访问都通过 Delegate 隔离。
@@ -32,7 +32,7 @@
 - [docs/BEGINNER_CODE_WALKTHROUGH.md](docs/BEGINNER_CODE_WALKTHROUGH.md)：以智能分流为例，
   从 API 请求、准入、ReAct、LangGraph、暂停恢复、商品推荐到完整结束逐步解释。
 
-文档覆盖：LangGraph/LangChain 编排、ReAct 场景路由、Scenario Tool/Atomic Tool、智能分流与知识推荐业务规则、商品推荐 Subgraph、Delegate 适配层、AG-UI + SSE、OpenGauss Checkpoint、长期记忆、全链路 Trace、React 前端、部署、测试和严格验收标准。
+文档覆盖：LangGraph/LangChain 编排、ReAct 场景路由、Scenario Tool/Atomic Tool、智能分流与知识推荐业务规则、商品推荐 Subgraph、Delegate 适配层、AG-UI + SSE、OpenGauss Checkpoint、长期记忆、全链路 Trace、Vue 3 前端、部署、测试和严格验收标准。
 
 代码开发和验收均以该文档为唯一依据。
 
@@ -40,11 +40,12 @@
 
 项目明确区分：
 
-1. **本地可运行完成**：使用测试专用 Fake Delegate 跑通真实 LangGraph 后端和 React 前端。
+1. **本地可运行完成**：使用测试专用 Fake Delegate 跑通真实 LangGraph 后端和 Vue 3 前端。
 2. **生产接入完成**：真实 OpenGauss、外围 Agent、搜索、知识、排队、页面跳转和申购单能力全部验证通过。
 
-当前已在 Python 3.12 环境安装后端锁定依赖并验证集成测试；仍没有 OpenGauss 测试环境、
-外围接口正式协议和完整前端 npm 依赖，因此不得误报为“生产接入完成”或“前端构建已通过”。
+当前已在 Python 3.12 环境安装后端锁定依赖并验证集成测试，也已完成 Vue 3 前端依赖锁定、
+构建、Lint、格式检查和桌面 Chrome E2E；仍没有 OpenGauss 测试环境和外围接口正式协议，
+因此不得误报为“生产接入完成”。
 
 后端静态门禁（不依赖联网）已经通过：
 

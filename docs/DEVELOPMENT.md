@@ -2,7 +2,7 @@
 
 > 文档状态：Core / Business 物理分层已完成，本文与当前代码保持一致
 >
-> 代码状态：后端前三层（接入与应用、编排核心、资源访问）已完成物理分层，前端本轮不处理
+> 代码状态：后端前三层（接入与应用、编排核心、资源访问）已完成物理分层，前端已迁移到 Vue 3
 >
 > 本文是本项目唯一权威的开发依据。聊天记录、旧项目代码和其他目录文档均不得替代本文。
 
@@ -36,7 +36,7 @@
 3. 新增一个使用既有交互原语的业务场景，只修改 Business 目录。
 4. Core 仍可因真正的平台能力升级而演进，但普通业务变更不得修改 Core。
 5. 代码保持一个服务、一个仓库和一个进程，不拆微服务，不使用运行时扫描。
-6. 本轮只重构结构，不修改现有 API、SSE、数据库表和业务规则；前端本轮不移动、不改造。
+6. 前端使用 Vue 3 重写展示层，但不修改现有 API、SSE、数据库表和业务规则。
 
 ### 1.2 用一句话理解两层
 
@@ -295,7 +295,7 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 - 两个确定性业务 LangGraph。
 - 主服务内部的商品推荐 Subgraph。
 - LangGraph 暂停、恢复和 24 小时 Checkpoint。
-- React 正式前端，直接调用真实 LangGraph 后端，不使用 Mock Backend。
+- Vue 3 正式前端，直接调用真实 LangGraph 后端，不使用 Mock Backend。
 - AG-UI 标准事件及采购领域扩展事件。
 - 外围 Agent 的流式与非流式 Delegate。
 - OpenAI 兼容 Model Delegate 和测试专用 Mock Model。
@@ -342,7 +342,7 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 | ReAct | 只负责自然语言场景路由，不能绕过业务 DAG |
 | 业务流程 | 智能分流和知识推荐使用确定性 LangGraph |
 | 商品推荐 | 主服务内部 LangGraph Subgraph，不单独部署 |
-| 前端 | React + TypeScript + Vite + Ant Design |
+| 前端 | Vue 3 + TypeScript + Vite + Ant Design Vue |
 | Agent UI 协议 | AG-UI 标准事件 + 采购 `CUSTOM` 事件 |
 | HTTP | 一个 POST 请求通过 SSE 返回该 Run 的 AG-UI 流 |
 | 状态 | OpenGauss Checkpoint，正式环境禁止只用内存 |
@@ -364,8 +364,8 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ React + TypeScript + Ant Design                             │
-│ AG-UI Client │ 采购业务组件 │ PurchaseFormBridge            │
+│ Vue 3 + TypeScript + Ant Design Vue                         │
+│ AG-UI 协议适配 │ 采购业务组件 │ PurchaseFormBridge            │
 └──────────────────────────┬──────────────────────────────────┘
                            │ POST + SSE / AG-UI
 ┌──────────────────────────▼──────────────────────────────────┐
@@ -404,7 +404,7 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 
 | 部分 | 只负责 | 不负责 |
 |---|---|---|
-| React 前端 | 展示 AG-UI 事件、收集用户输入、执行前端加购和页面跳转 | 决定 Graph 节点、解释 Agent 原始协议 |
+| Vue 3 前端 | 展示 AG-UI 事件、收集用户输入、执行前端加购和页面跳转 | 决定 Graph 节点、解释 Agent 原始协议 |
 | FastAPI 接入 | 身份、请求校验、Run 生命周期、SSE、错误边界 | 编写采购业务判断 |
 | 场景分发 | 让按钮直达 Scenario Tool，让自然语言进入 ReAct | 执行 IOI、栏目等采购判断 |
 | ReAct 路由 | 根据自然语言选择受支持场景 | 直接执行 IOI、栏目、搜索或数据库操作 |
@@ -417,8 +417,8 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 ## 6. 技术版本基线
 
 后端已在 2026-08-05 通过 `uv` 完成兼容解析并提交 `uv.lock`；下表同时记录允许版本线和
-本次实际锁定版本。以后升级必须重新运行全部门禁，不能只修改版本号。前端本轮不处理，
-仍按其现有锁文件单独验收。
+本次实际锁定版本。以后升级必须重新运行全部门禁，不能只修改版本号。Vue 3 前端使用
+独立的 `package-lock.json` 锁定并单独验收。
 
 ### 6.1 后端版本线
 
@@ -446,12 +446,10 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 |---|---|
 | Node.js | 24 LTS 最新补丁版 |
 | npm | Node 24 配套稳定版 |
-| React / React DOM | 19.x，相同确切版本 |
+| Vue | 3.x，使用同一 Vue 运行时 |
 | TypeScript | 开发时最新稳定兼容版 |
 | Vite | 开发时最新稳定兼容版 |
-| Ant Design | 6.x 最新稳定兼容版 |
-| `@ag-ui/core` | 最新稳定版 |
-| `@ag-ui/client` | 与 core 协议兼容的相同发布线 |
+| Ant Design Vue | 4.x 最新稳定兼容版 |
 | Zod | 最新稳定兼容版 |
 
 ### 6.3 测试与质量工具
@@ -470,7 +468,7 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 1. 后端必须提交 `pyproject.toml` 和 `uv.lock`。
 2. 前端必须提交 `package.json` 和 `package-lock.json`。
 3. 所有安装和生产构建必须使用锁文件的 frozen 模式。
-4. React 与 React DOM 必须使用完全相同版本。
+4. Vue 与 Ant Design Vue 必须通过锁文件保持可重复安装，并完成浏览器验收。
 5. LangChain、langchain-core、langchain-openai 与 LangGraph 必须一起解析，不能分别强制安装各自最高版本。
 6. AG-UI Python 与 TypeScript SDK 必须完成协议互通测试。
 7. 若最新版本不兼容 Python 3.12、Node 24、OpenGauss 或其他核心依赖，退回最近的稳定兼容版，并在 `README.md` 记录原因。
@@ -482,8 +480,8 @@ Core 的表单和 Action 只保存通用结构。Business Registry 提供具体�
 
 - LangGraph 1.x 的 Subgraph、Interrupt、Checkpoint 与异步流式 API 验证。
 - LangChain 1.x ReAct Agent 与 Scenario handoff Tool 验证。
-- AG-UI Python SDK、React Client、LangGraph 流和 `CUSTOM` 事件验证。
-- Ant Design 与 React 19 验证。
+- AG-UI Python SDK、Vue SSE 适配器、LangGraph 流和 `CUSTOM` 事件验证。
+- Ant Design Vue 与 Vue 3 验证。
 - Python 3.12 下 Psycopg 与预期 OpenGauss 版本的驱动验证；没有真实数据库时标记为未验证。
 
 ## 7. 目标目录结构
@@ -535,22 +533,21 @@ procumentagent_lite/                              # 项目根目录，只放跨�
 │               │   ├── smart_routing/             # 智能分流及 definition.py
 │               │   └── subgraphs/                 # 商品推荐内部子图
 │               └── tools/                         # 每个 Scenario/Atomic Tool 一个文件
-├── frontend/                                     # React 前端生产工程，禁止放后端和测试代码
+├── frontend/                                     # Vue 3 前端生产工程，禁止放后端和测试代码
 │   ├── package.json                              # 前端依赖与脚本
 │   ├── package-lock.json                         # 前端精确依赖锁
 │   ├── vite.config.ts                            # Vite 开发和构建配置
 │   ├── tsconfig.json                             # TypeScript 严格模式配置
 │   ├── Dockerfile                                # 前端静态文件生产镜像
 │   └── src/                                      # 前端生产源码根目录
-│       ├── main.tsx                              # React 唯一启动入口
-│       ├── app/                                  # 全局 Provider、主题、路由和错误边界
-│       ├── agui/                                 # AG-UI Client、标准事件和采购事件解析
+│       ├── main.ts                               # Vue 唯一启动入口和组件库装配
+│       ├── App.vue                               # 顶层页面组合
+│       ├── agui/                                 # AG-UI SSE、标准事件和采购事件解析
 │       ├── assistant/                            # 场景入口、对话、表单、Action 和会话恢复
 │       ├── procurement/                          # 商品组件、申购单和 PurchaseFormBridge
-│       ├── components/                           # 无业务判断的共享展示组件
 │       ├── config/                               # 前端环境配置和导航目标映射
 │       ├── schemas/                              # Zod 运行时协议校验
-│       └── styles/                               # Ant Design 主题 token 和少量业务样式
+│       └── styles.css                            # Ant Design Vue 的补充业务样式
 ├── test_support/                                 # 非生产的 Fake、固定数据和本地 Mock 装配
 │   ├── fake_delegates/                           # 各外围 Agent、服务和数据库的可控 Fake
 │   ├── fake_model/                               # 不调用真实模型的确定性 Model Delegate
@@ -794,7 +791,7 @@ business/bootstrap.py 在最外层创建并连接所有对象
 
 ### 10.6 Form 事件
 
-表单只允许预定义字段类型：`text`、`number`、`select`。禁止后端下发任意 React 组件名。
+表单只允许预定义字段类型：`text`、`number`、`select`。禁止后端下发任意 Vue 组件名。
 
 每个表单包含：
 
@@ -871,7 +868,7 @@ business/bootstrap.py 在最外层创建并连接所有对象
 - `self_purchase`
 - `custom_purchase`
 
-实际 URL 由 React 环境配置映射。后端、模型和外围 Agent 均不能产生任意跳转 URL。
+实际 URL 由 Vue 3 环境配置映射。后端、模型和外围 Agent 均不能产生任意跳转 URL。
 
 ### 10.9 会话快照
 
@@ -2033,7 +2030,7 @@ ORDER BY started_at DESC;
 
 SQL 参数语法和时间函数需按最终 OpenGauss 客户端验证；应用生产代码始终使用参数绑定，禁止字符串拼接。
 
-## 21. React 前端设计
+## 21. Vue 3 前端设计
 
 ### 21.1 前端职责
 
@@ -2041,7 +2038,7 @@ SQL 参数语法和时间函数需按最终 OpenGauss 客户端验证；应用�
 
 - 创建或恢复当前 `threadId`。
 - 生成每次请求唯一的 `runId`。
-- 用 AG-UI Client 发起 POST + SSE，并处理标准事件。
+- 用 AG-UI 协议适配器发起 POST + SSE，并处理标准事件。
 - 用 Zod 校验采购 `CUSTOM` 事件，再渲染对应组件。
 - 提交表单和一次性 Action。
 - 通过 `PurchaseFormBridge` 完成前端加购。
@@ -2056,30 +2053,28 @@ SQL 参数语法和时间函数需按最终 OpenGauss 客户端验证；应用�
 
 ```text
 frontend/src/
-├── app/
-│   ├── App.tsx                         # 页面组合，不写协议解析
-│   ├── AppProviders.tsx                # Ant Design、会话和错误边界 Provider
-│   └── ErrorBoundary.tsx               # 未捕获渲染错误的安全兜底
+├── App.vue                             # 顶层页面组合，不写协议解析
+├── main.ts                             # Vue 和 Ant Design Vue 装配
 ├── agui/
-│   ├── client.ts                       # POST + SSE 的 AG-UI Client 装配
+│   ├── client.ts                       # POST + SSE 的 AG-UI 协议适配器
 │   ├── eventReducer.ts                 # 标准事件与已校验采购事件归并
 │   ├── procurementEvents.ts            # CUSTOM 事件 TypeScript 类型
 │   └── runController.ts                # runId、取消、忙状态和错误映射
 ├── assistant/
-│   ├── AssistantPage.tsx               # 助手页面主体
-│   ├── SessionProvider.tsx             # 当前 thread 和 UI 快照状态
-│   ├── SceneEntrances.tsx              # 智能分流/知识推荐按钮
-│   ├── MessageList.tsx                 # 用户与助手消息
-│   ├── DynamicForm.tsx                 # 只渲染允许字段类型
-│   ├── OptionSelector.tsx              # 栏目单选
-│   ├── ActionBar.tsx                   # 后端一次性操作
-│   └── AgentStreamBlock.tsx            # 允许展示的外围流进度
+│   ├── AssistantPage.vue               # 助手页面主体
+│   ├── useSession.ts                   # 当前 thread、Run 和 UI 快照状态
+│   ├── SceneEntrances.vue              # 智能分流/知识推荐按钮
+│   ├── MessageList.vue                 # 用户与助手消息
+│   ├── DynamicForm.vue                 # 只渲染允许字段类型
+│   ├── OptionSelector.vue              # 栏目单选
+│   ├── ActionBar.vue                   # 后端一次性操作
+│   └── AgentStreamBlock.vue            # 允许展示的外围流进度
 ├── procurement/
-│   ├── ProductList.tsx                 # 商品列表和加购
-│   ├── QueueNotice.tsx                 # 固定排队提示
-│   ├── PurchaseFormBridge.ts            # 加购接口
-│   ├── LocalPurchaseFormBridge.ts       # 本地 Demo 申购单实现
-│   └── HostPurchaseFormBridge.ts        # 公司页面接入实现边界
+│   ├── ProductList.vue                 # 商品列表和加购
+│   ├── QueueNotice.vue                 # 固定排队提示
+│   ├── PurchaseFormBridge.ts             # 加购接口
+│   ├── LocalPurchaseFormBridge.ts        # 本地 Demo 申购单实现
+│   └── HostPurchaseFormBridge.ts         # 公司页面接入实现边界
 ├── config/
 │   ├── env.ts                          # 构建期环境变量校验
 │   └── navigation.ts                   # 三个固定目标到 URL 的映射
@@ -2088,13 +2083,13 @@ frontend/src/
     └── procurementEvents.ts            # 每种 CUSTOM payload 的 Zod Schema
 ```
 
-不得把所有事件处理、页面状态和业务组件放入 `App.tsx`。TypeScript 必须开启严格模式，业务事件禁止使用 `any`。
+不得把所有事件处理、页面状态和业务组件放入 `App.vue`。TypeScript 必须开启严格模式，业务事件禁止使用 `any`。
 
 ### 21.3 AG-UI 事件处理
 
 处理顺序：
 
-1. AG-UI SDK 解析标准 SSE 事件。
+1. `agui/client.ts` 解析标准 SSE 事件，并用 Zod 校验 AG-UI 事件结构。
 2. `CUSTOM` 事件按 `name` 找到固定 Zod Schema。
 3. 校验 `schema`、`threadId`、`runId`、`eventId`、`sequence` 和 payload。
 4. `eventReducer` 以不可变方式更新界面状态。
@@ -2105,7 +2100,7 @@ frontend/src/
 - 同一 Run 的 `sequence` 必须严格递增；重复 `eventId` 忽略并记录浏览器诊断日志。
 - `threadId` 或 `runId` 与当前请求不一致的事件不得应用。
 - 未知采购 `name` 或不支持的 `schema` 不渲染，显示一次安全的“界面协议不兼容”错误。
-- payload 中的字符串按普通文本渲染，禁止 `dangerouslySetInnerHTML`。
+- payload 中的字符串按普通文本渲染，禁止使用 `v-html`。
 - `RUN_FINISHED` 只表示本次 Run 结束，不自动表示整个场景结束；场景状态以 `procurement.scene` 为准。
 - 页面刷新后先获取 snapshot，再允许提交与快照等待点匹配的 Action。
 
@@ -2170,7 +2165,7 @@ custom_purchase
 - 表单 label 与错误提示关联。
 - 流式更新使用适当的 `aria-live`，避免每个 token 都打断读屏。
 - Action pending、禁用和加载状态可见。
-- Ant Design 主题使用 token 管理，不散落大量行内色值。
+- Ant Design Vue 主题使用 `a-config-provider` 的 token 管理，不散落大量行内色值。
 - 长内容、商品名称和错误文案不能遮挡主要按钮。
 
 ## 22. 配置、缓存与容量边界
@@ -2654,7 +2649,7 @@ core/shared/
 
 ### 26.7 Chrome E2E
 
-Playwright 只使用桌面 Chrome 项目，启动真实 FastAPI、真实编译 Graph、正式 React 构建和测试专用 Fake Delegate。至少自动完成：
+Playwright 只使用桌面 Chrome 项目，启动真实 FastAPI、真实编译 Graph、正式 Vue 3 构建和测试专用 Fake Delegate。至少自动完成：
 
 1. 自然语言进入智能分流，补表单、多栏目选择、展示商品、加购、换一批、进入自定义采购、展示排队、点击跳转。
 2. IOI 直接跳转。
@@ -2696,7 +2691,7 @@ E2E 禁止拦截后端接口后返回静态页面数据；必须让请求进入�
 
 只有本文被用户明确审核通过后，才按以下顺序开发：
 
-1. **兼容性试验**：联网解析并锁定依赖；验证 LangGraph 1.x、LangChain 1.x、AG-UI、React 19 和 OpenAI 兼容本地模型的最小链路。
+1. **兼容性试验**：联网解析并锁定依赖；验证 LangGraph 1.x、LangChain 1.x、AG-UI、Vue 3 和 OpenAI 兼容本地模型的最小链路。
 2. **工程骨架**：创建目录、质量配置、生产/测试装配边界和中文代码规范示例。
 3. **Domain 与协议**：实现 Pydantic/Zod 模型、标识、错误和全部采购事件契约。
 4. **Delegate 接口与 Fake**：不猜外围 HTTP，先完成可控成功/失败/流式 Fake。
@@ -2704,7 +2699,7 @@ E2E 禁止拦截后端接口后返回静态页面数据；必须让请求进入�
 6. **Graph Runtime**：完成场景生命周期、interrupt/resume、截止时间、幂等和 SSE 适配。
 7. **模型与 ReAct**：实现 Prompt Catalog、OpenAI 兼容 Delegate 和仅 Scenario Tool 的路由。
 8. **业务 Graph**：按智能分流、商品推荐 Subgraph、知识推荐顺序实现并逐路径集成测试。
-9. **React 前端**：实现 AG-UI 事件、全部采购组件、Local Bridge、快照恢复和固定导航。
+9. **Vue 3 前端**：实现 AG-UI 事件、全部采购组件、Local Bridge、快照恢复和固定导航。
 10. **全链路质量**：补齐 Trace、长期记忆、失败重试、E2E 和并发冒烟。
 11. **部署**：完成原生虚拟机、Docker、迁移、场景过期、健康检查和生产镜像验证。
 12. **真实接入**：每收到一份外围协议，就实现一个生产 Delegate 和契约测试；最后在目标环境完成生产验收。
@@ -2718,7 +2713,7 @@ E2E 禁止拦截后端接口后返回静态页面数据；必须让请求进入�
 只有同时满足以下条件才可称为“本地可运行完成”：
 
 - 后端和前端使用锁文件可重复安装、构建和启动。
-- React 调用真实 FastAPI、AG-UI 适配和真实编译 LangGraph。
+- Vue 3 调用真实 FastAPI、AG-UI 适配和真实编译 LangGraph。
 - ReAct 使用可配置 OpenAI 兼容接口；自动测试可替换为 Fake Model。
 - 所有外部业务能力使用 `test_support` Fake，但路径、超时、重试和流式行为经过真实 Delegate 接口。
 - 智能分流和知识推荐全部测试矩阵通过。
@@ -2800,8 +2795,8 @@ E2E 禁止拦截后端接口后返回静态页面数据；必须让请求进入�
 以用户输入“我需要购买笔记本，用于研发办公，预算 9000 元，请推荐商品和采购模式”为例：
 
 1. Chrome 前端取得页面提供的 `user_id` 和 `regionCode`。
-2. `SessionProvider` 读取或创建当前 `threadId`，`runController` 为本次请求生成新 `runId`。
-3. AG-UI Client 把用户消息、两个 ID 和 `pageContext` POST 到 `/api/v1/agent`。
+2. `useSession` 读取或创建当前 `threadId`，`runController` 为本次请求生成新 `runId`。
+3. AG-UI 协议适配器把用户消息、两个 ID 和 `pageContext` POST 到 `/api/v1/agent`。
 4. FastAPI 使用 Pydantic 校验请求和 `X-User-ID`，拒绝客户端 Tool/State 注入。
 5. Trace Collector 创建根 span；Database Delegate 在短事务中检查 `runId`、获得 thread 租约并登记 Run。
 6. 会话当前没有活动场景，因此自然语言进入 ReAct；ReAct 只能看到静态 Scenario Tool 描述。

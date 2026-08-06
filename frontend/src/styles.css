@@ -1,6 +1,13 @@
 :root {
   color: #1f2a44;
   background: #f4f7fb;
+  font-family:
+    Inter,
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -11,8 +18,15 @@
 
 body {
   margin: 0;
-  min-width: 1100px;
+  min-width: 320px;
   min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 .app-shell {
@@ -29,21 +43,40 @@ body {
 
 .header-content {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   width: 100%;
+  gap: 20px;
 }
 
-.app-title.ant-typography {
+.app-title {
   margin: 0;
   color: #27395e;
+  font-size: 24px;
+  line-height: 1.3;
 }
 
-.app-subtitle {
+.app-subtitle,
+.secondary-text,
+.trace-id {
   color: #60708f;
 }
 
+.app-subtitle {
+  margin: 6px 0 0;
+}
+
+.header-actions,
+.button-row,
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .assistant-content {
-  max-width: 1120px;
+  width: min(1120px, 100%);
   padding: 28px 32px 56px;
   margin: 0 auto;
 }
@@ -58,17 +91,38 @@ body {
   margin-bottom: 18px;
 }
 
+.scene-entrances h2,
+.product-section h2 {
+  margin: 0 0 16px;
+  color: #27395e;
+  font-size: 20px;
+}
+
 .conversation-card .ant-card-body {
   padding-bottom: 20px;
 }
 
-.message-list {
-  max-height: 420px;
-  overflow-y: auto;
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
 }
 
-.message-row.ant-list-item {
-  border: 0;
+.composer .ant-input {
+  flex: 1;
+}
+
+.message-list {
+  max-height: 420px;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.message-row {
+  display: flex;
+  margin: 10px 0;
 }
 
 .message-user {
@@ -79,6 +133,7 @@ body {
   max-width: 78%;
   padding: 10px 14px;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
   background: #f1f4f8;
   border-radius: 12px;
 }
@@ -87,28 +142,169 @@ body {
   background: #e6efff;
 }
 
+.empty-state,
+.restore-state {
+  padding: 30px 0;
+  color: #7c8aa5;
+  text-align: center;
+}
+
 .block-actions {
   margin-top: 20px;
 }
 
+.dynamic-form {
+  display: grid;
+  gap: 14px;
+}
+
+.form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.form-field label {
+  color: #33415f;
+  font-weight: 600;
+}
+
+.form-field input,
+.form-field select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #d9e1ee;
+  border-radius: 6px;
+  outline: none;
+}
+
+.form-field input:focus,
+.form-field select:focus {
+  border-color: #5277c3;
+  box-shadow: 0 0 0 2px rgb(82 119 195 / 12%);
+}
+
+.field-error {
+  color: #d4380d;
+  font-size: 12px;
+}
+
+.option-list {
+  display: grid;
+  gap: 12px;
+}
+
+.option-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.option-item span {
+  display: grid;
+  gap: 4px;
+}
+
+.option-item small {
+  color: #60708f;
+}
+
+.product-section .section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.product-notice {
+  margin-bottom: 14px;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .product-card {
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   overflow: hidden;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgb(39 57 94 / 4%);
+}
+
+.product-card > img,
+.product-placeholder {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
 }
 
 .product-placeholder {
   display: grid;
-  height: 160px;
   color: #7c8aa5;
   background: #eef3fa;
   place-items: center;
 }
 
-.full-width-input {
-  width: 100%;
+.product-body {
+  display: grid;
+  flex: 1;
+  gap: 9px;
+  padding: 16px;
+}
+
+.product-body h3 {
+  margin: 0;
+  color: #27395e;
+  font-size: 16px;
+}
+
+.product-body .ant-btn {
+  align-self: end;
+  margin-top: 6px;
 }
 
 .trace-id {
   margin-top: 24px;
   overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .app-header {
+    padding: 16px 20px;
+  }
+
+  .assistant-content {
+    padding: 20px 16px 40px;
+  }
+
+  .purchase-sider {
+    display: none;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .header-content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .composer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
 }
